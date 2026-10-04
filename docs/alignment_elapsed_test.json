@@ -1,0 +1,134 @@
+[
+  {
+    "Recording": "190304A_E",
+    "duration_s": 1575.0,
+    "max_annotation_s": 38112.999999999985,
+    "status": "no"
+  },
+  {
+    "Recording": "191113A_D",
+    "duration_s": 1810.0,
+    "max_annotation_s": 38531.99999999998,
+    "status": "no"
+  },
+  {
+    "Recording": "200625A_F",
+    "duration_s": 1788.0,
+    "max_annotation_s": null,
+    "status": "no annotations"
+  },
+  {
+    "Recording": "210204B_C",
+    "duration_s": 1227.0,
+    "max_annotation_s": 38388.00000000004,
+    "status": "no"
+  },
+  {
+    "Recording": "210208B_G",
+    "duration_s": 1200.0,
+    "max_annotation_s": 41350.00000000001,
+    "status": "no"
+  },
+  {
+    "Recording": "210406A_F",
+    "duration_s": 1454.0,
+    "max_annotation_s": 54958.0,
+    "status": "no"
+  },
+  {
+    "Recording": "210427B_C",
+    "duration_s": 1246.0,
+    "max_annotation_s": 32679.00000000003,
+    "status": "no"
+  },
+  {
+    "Recording": "210504B_C",
+    "duration_s": 3121.0,
+    "max_annotation_s": 48717.00000000003,
+    "status": "no"
+  },
+  {
+    "Recording": "210914B_A",
+    "duration_s": 1205.0,
+    "max_annotation_s": 31085.000000000036,
+    "status": "no"
+  },
+  {
+    "Recording": "210928B_B",
+    "duration_s": 1344.0,
+    "max_annotation_s": 34190.00000000004,
+    "status": "no"
+  },
+  {
+    "Recording": "211027B_C",
+    "duration_s": 1255.0,
+    "max_annotation_s": 38132.00000000004,
+    "status": "no"
+  },
+  {
+    "Recording": "211104B_D",
+    "duration_s": 1210.0,
+    "max_annotation_s": 40546.999999999956,
+    "status": "no"
+  },
+  {
+    "Recording": "220106A_A",
+    "duration_s": 1221.0,
+    "max_annotation_s": 30805.00000000001,
+    "status": "no"
+  },
+  {
+    "Recording": "220121B_D",
+    "duration_s": 1292.0,
+    "max_annotation_s": 37257.00000000002,
+    "status": "no"
+  },
+  {
+    "Recording": "230102B_F",
+    "duration_s": 1225.0,
+    "max_annotation_s": 44712.99999999999,
+    "status": "no"
+  },
+  {
+    "Recording": "230105B_H",
+    "duration_s": 3600.0,
+    "max_annotation_s": 55185.00000000002,
+    "status": "no"
+  },
+  {
+    "Recording": "230210B_D",
+    "duration_s": 1173.0,
+    "max_annotation_s": 36775.999999999985,
+    "status": "no"
+  },
+  {
+    "Recording": "230224B_B",
+    "duration_s": 1428.0,
+    "max_annotation_s": 33611.00000000002,
+    "status": "no"
+  },
+  {
+    "Recording": "230406B_A",
+    "duration_s": 1225.0,
+    "max_annotation_s": 31101.00000000002,
+    "status": "no"
+  },
+  {
+    "Recording": "230515B_G",
+    "duration_s": 1207.0,
+    "max_annotation_s": 45044.00000000003,
+    "status": "no"
+  },
+  {
+    "Recording": "230519A_E",
+    "duration_s": 1216.0,
+    "max_annotation_s": 41907.99999999997,
+    "status": "no"
+  },
+  {
+    "Recording": "230718A_A",
+    "duration_s": 1206.0,
+    "max_annotation_s": 30584.000000000044,
+    "status": "no"
+  }
+]

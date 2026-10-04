@@ -1,0 +1,20 @@
+[
+  {
+    "label": "Data-driven",
+    "offset": 32333.0,
+    "start_s": 327.99999999996726,
+    "end_s": 346.0000000000291,
+    "score": 0.34267939509267953,
+    "inside_outside_ratio": 2.902137412437031,
+    "window_count": 73
+  },
+  {
+    "label": "Header anchor",
+    "offset": 31839.0,
+    "start_s": 821.9999999999673,
+    "end_s": 840.0000000000291,
+    "score": 0.2306967830012734,
+    "inside_outside_ratio": 2.268977266597478,
+    "window_count": 73
+  }
+]

@@ -1,0 +1,13 @@
+numpy
+scipy
+h5py
+pandas
+openpyxl
+matplotlib
+seaborn
+scikit-learn
+jupyter
+ipykernel
+mat-io==1.0.0
+pyarrow==25.0.1
+XlsxWriter==3.2.9

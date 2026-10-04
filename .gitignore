@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+
+.agents/
+.aws/
+.codex/
+
+data/raw/
+data/excel/
+data/processed/

@@ -1,0 +1,1442 @@
+[
+  {
+    "cell": "A1",
+    "header": null,
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "B1",
+    "header": "Sexe",
+    "value": "Sexe",
+    "python_repr": "'Sexe'",
+    "excel_type": "s",
+    "xml_type": "s",
+    "xml_literal": "0",
+    "number_format": "General"
+  },
+  {
+    "cell": "C1",
+    "header": "Age",
+    "value": "Age",
+    "python_repr": "'Age'",
+    "excel_type": "s",
+    "xml_type": "s",
+    "xml_literal": "1",
+    "number_format": "General"
+  },
+  {
+    "cell": "D1",
+    "header": "NombreCrises",
+    "value": "NombreCrises",
+    "python_repr": "'NombreCrises'",
+    "excel_type": "s",
+    "xml_type": "s",
+    "xml_literal": "2",
+    "number_format": "General"
+  },
+  {
+    "cell": "E1",
+    "header": "TypeAbs",
+    "value": "TypeAbs",
+    "python_repr": "'TypeAbs'",
+    "excel_type": "s",
+    "xml_type": "s",
+    "xml_literal": "3",
+    "number_format": "General"
+  },
+  {
+    "cell": "F1",
+    "header": "DebCE1",
+    "value": "DebCE1",
+    "python_repr": "'DebCE1'",
+    "excel_type": "s",
+    "xml_type": "s",
+    "xml_literal": "4",
+    "number_format": "General"
+  },
+  {
+    "cell": "G1",
+    "header": "FinCE1",
+    "value": "FinCE1",
+    "python_repr": "'FinCE1'",
+    "excel_type": "s",
+    "xml_type": "s",
+    "xml_literal": "5",
+    "number_format": "General"
+  },
+  {
+    "cell": "H1",
+    "header": "DebCE2",
+    "value": "DebCE2",
+    "python_repr": "'DebCE2'",
+    "excel_type": "s",
+    "xml_type": "s",
+    "xml_literal": "6",
+    "number_format": "General"
+  },
+  {
+    "cell": "I1",
+    "header": "FinCE2",
+    "value": "FinCE2",
+    "python_repr": "'FinCE2'",
+    "excel_type": "s",
+    "xml_type": "s",
+    "xml_literal": "7",
+    "number_format": "General"
+  },
+  {
+    "cell": "J1",
+    "header": "DebCE3",
+    "value": "DebCE3",
+    "python_repr": "'DebCE3'",
+    "excel_type": "s",
+    "xml_type": "s",
+    "xml_literal": "8",
+    "number_format": "General"
+  },
+  {
+    "cell": "K1",
+    "header": "FinCE3",
+    "value": "FinCE3",
+    "python_repr": "'FinCE3'",
+    "excel_type": "s",
+    "xml_type": "s",
+    "xml_literal": "9",
+    "number_format": "General"
+  },
+  {
+    "cell": "L1",
+    "header": "DebCE4",
+    "value": "DebCE4",
+    "python_repr": "'DebCE4'",
+    "excel_type": "s",
+    "xml_type": "s",
+    "xml_literal": "10",
+    "number_format": "General"
+  },
+  {
+    "cell": "M1",
+    "header": "FinCE4",
+    "value": "FinCE4",
+    "python_repr": "'FinCE4'",
+    "excel_type": "s",
+    "xml_type": "s",
+    "xml_literal": "11",
+    "number_format": "General"
+  },
+  {
+    "cell": "N1",
+    "header": "DebutCE5",
+    "value": "DebutCE5",
+    "python_repr": "'DebutCE5'",
+    "excel_type": "s",
+    "xml_type": "s",
+    "xml_literal": "12",
+    "number_format": "General"
+  },
+  {
+    "cell": "O1",
+    "header": "FinCE5",
+    "value": "FinCE5",
+    "python_repr": "'FinCE5'",
+    "excel_type": "s",
+    "xml_type": "s",
+    "xml_literal": "13",
+    "number_format": "General"
+  },
+  {
+    "cell": "P1",
+    "header": "DebCE6",
+    "value": "DebCE6",
+    "python_repr": "'DebCE6'",
+    "excel_type": "s",
+    "xml_type": "s",
+    "xml_literal": "14",
+    "number_format": "General"
+  },
+  {
+    "cell": "Q1",
+    "header": "FinCE6",
+    "value": "FinCE6",
+    "python_repr": "'FinCE6'",
+    "excel_type": "s",
+    "xml_type": "s",
+    "xml_literal": "15",
+    "number_format": "General"
+  },
+  {
+    "cell": "R1",
+    "header": "DebCE7",
+    "value": "DebCE7",
+    "python_repr": "'DebCE7'",
+    "excel_type": "s",
+    "xml_type": "s",
+    "xml_literal": "16",
+    "number_format": "General"
+  },
+  {
+    "cell": "S1",
+    "header": "FinCE7",
+    "value": "FinCE7",
+    "python_repr": "'FinCE7'",
+    "excel_type": "s",
+    "xml_type": "s",
+    "xml_literal": "17",
+    "number_format": "General"
+  },
+  {
+    "cell": "T1",
+    "header": "DebCE8",
+    "value": "DebCE8",
+    "python_repr": "'DebCE8'",
+    "excel_type": "s",
+    "xml_type": "s",
+    "xml_literal": "18",
+    "number_format": "General"
+  },
+  {
+    "cell": "U1",
+    "header": "FinCE8",
+    "value": "FinCE8",
+    "python_repr": "'FinCE8'",
+    "excel_type": "s",
+    "xml_type": "s",
+    "xml_literal": "19",
+    "number_format": "General"
+  },
+  {
+    "cell": "V1",
+    "header": "DebCE9",
+    "value": "DebCE9",
+    "python_repr": "'DebCE9'",
+    "excel_type": "s",
+    "xml_type": "s",
+    "xml_literal": "20",
+    "number_format": "General"
+  },
+  {
+    "cell": "W1",
+    "header": "FinCE9",
+    "value": "FinCE9",
+    "python_repr": "'FinCE9'",
+    "excel_type": "s",
+    "xml_type": "s",
+    "xml_literal": "21",
+    "number_format": "General"
+  },
+  {
+    "cell": "X1",
+    "header": "DebCE10",
+    "value": "DebCE10",
+    "python_repr": "'DebCE10'",
+    "excel_type": "s",
+    "xml_type": "s",
+    "xml_literal": "22",
+    "number_format": "General"
+  },
+  {
+    "cell": "Y1",
+    "header": "FinCE10",
+    "value": "FinCE10",
+    "python_repr": "'FinCE10'",
+    "excel_type": "s",
+    "xml_type": "s",
+    "xml_literal": "23",
+    "number_format": "General"
+  },
+  {
+    "cell": "Z1",
+    "header": "DebtCE11",
+    "value": "DebtCE11",
+    "python_repr": "'DebtCE11'",
+    "excel_type": "s",
+    "xml_type": "s",
+    "xml_literal": "24",
+    "number_format": "General"
+  },
+  {
+    "cell": "AA1",
+    "header": "FinCE11",
+    "value": "FinCE11",
+    "python_repr": "'FinCE11'",
+    "excel_type": "s",
+    "xml_type": "s",
+    "xml_literal": "25",
+    "number_format": "General"
+  },
+  {
+    "cell": "AB1",
+    "header": "DebCE12",
+    "value": "DebCE12",
+    "python_repr": "'DebCE12'",
+    "excel_type": "s",
+    "xml_type": "s",
+    "xml_literal": "26",
+    "number_format": "General"
+  },
+  {
+    "cell": "AC1",
+    "header": "FinCE12",
+    "value": "FinCE12",
+    "python_repr": "'FinCE12'",
+    "excel_type": "s",
+    "xml_type": "s",
+    "xml_literal": "27",
+    "number_format": "General"
+  },
+  {
+    "cell": "AD1",
+    "header": "Intercrit1",
+    "value": "Intercrit1",
+    "python_repr": "'Intercrit1'",
+    "excel_type": "s",
+    "xml_type": "s",
+    "xml_literal": "28",
+    "number_format": "General"
+  },
+  {
+    "cell": "AE1",
+    "header": "Intercrit2",
+    "value": "Intercrit2",
+    "python_repr": "'Intercrit2'",
+    "excel_type": "s",
+    "xml_type": "s",
+    "xml_literal": "29",
+    "number_format": "General"
+  },
+  {
+    "cell": "AF1",
+    "header": "Intercrit3",
+    "value": "Intercrit3",
+    "python_repr": "'Intercrit3'",
+    "excel_type": "s",
+    "xml_type": "s",
+    "xml_literal": "30",
+    "number_format": "General"
+  },
+  {
+    "cell": "AG1",
+    "header": "Intercrit4",
+    "value": "Intercrit4",
+    "python_repr": "'Intercrit4'",
+    "excel_type": "s",
+    "xml_type": "s",
+    "xml_literal": "31",
+    "number_format": "General"
+  },
+  {
+    "cell": "AH1",
+    "header": "Intercrit5",
+    "value": "Intercrit5",
+    "python_repr": "'Intercrit5'",
+    "excel_type": "s",
+    "xml_type": "s",
+    "xml_literal": "32",
+    "number_format": "General"
+  },
+  {
+    "cell": "AI1",
+    "header": "Intercrit6",
+    "value": "Intercrit6",
+    "python_repr": "'Intercrit6'",
+    "excel_type": "s",
+    "xml_type": "s",
+    "xml_literal": "33",
+    "number_format": "General"
+  },
+  {
+    "cell": "AJ1",
+    "header": "Intercrit7",
+    "value": "Intercrit7",
+    "python_repr": "'Intercrit7'",
+    "excel_type": "s",
+    "xml_type": "s",
+    "xml_literal": "34",
+    "number_format": "General"
+  },
+  {
+    "cell": "A3",
+    "header": null,
+    "value": "191113A-D",
+    "python_repr": "'191113A-D'",
+    "excel_type": "s",
+    "xml_type": "s",
+    "xml_literal": "37",
+    "number_format": "General"
+  },
+  {
+    "cell": "B3",
+    "header": "Sexe",
+    "value": "F",
+    "python_repr": "'F'",
+    "excel_type": "s",
+    "xml_type": "s",
+    "xml_literal": "38",
+    "number_format": "General"
+  },
+  {
+    "cell": "C3",
+    "header": "Age",
+    "value": 25,
+    "python_repr": "25",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "25",
+    "number_format": "General"
+  },
+  {
+    "cell": "D3",
+    "header": "NombreCrises",
+    "value": 2,
+    "python_repr": "2",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "2",
+    "number_format": "General"
+  },
+  {
+    "cell": "E3",
+    "header": "TypeAbs",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "F3",
+    "header": "DebCE1",
+    "value": 0.443900462962963,
+    "python_repr": "0.443900462962963",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "0.443900462962963",
+    "number_format": "General"
+  },
+  {
+    "cell": "G3",
+    "header": "FinCE1",
+    "value": 0.444050925925926,
+    "python_repr": "0.444050925925926",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "0.444050925925926",
+    "number_format": "General"
+  },
+  {
+    "cell": "H3",
+    "header": "DebCE2",
+    "value": 0.445914351851852,
+    "python_repr": "0.445914351851852",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "0.445914351851852",
+    "number_format": "General"
+  },
+  {
+    "cell": "I3",
+    "header": "FinCE2",
+    "value": 0.445972222222222,
+    "python_repr": "0.445972222222222",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "0.445972222222222",
+    "number_format": "General"
+  },
+  {
+    "cell": "J3",
+    "header": "DebCE3",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "K3",
+    "header": "FinCE3",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "L3",
+    "header": "DebCE4",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "M3",
+    "header": "FinCE4",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "N3",
+    "header": "DebutCE5",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "O3",
+    "header": "FinCE5",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "P3",
+    "header": "DebCE6",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "Q3",
+    "header": "FinCE6",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "R3",
+    "header": "DebCE7",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "S3",
+    "header": "FinCE7",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "T3",
+    "header": "DebCE8",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "U3",
+    "header": "FinCE8",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "V3",
+    "header": "DebCE9",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "W3",
+    "header": "FinCE9",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "X3",
+    "header": "DebCE10",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "Y3",
+    "header": "FinCE10",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "Z3",
+    "header": "DebtCE11",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "AA3",
+    "header": "FinCE11",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "AB3",
+    "header": "DebCE12",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "AC3",
+    "header": "FinCE12",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "AD3",
+    "header": "Intercrit1",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "AE3",
+    "header": "Intercrit2",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "AF3",
+    "header": "Intercrit3",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "AG3",
+    "header": "Intercrit4",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "AH3",
+    "header": "Intercrit5",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "AI3",
+    "header": "Intercrit6",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "AJ3",
+    "header": "Intercrit7",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "A5",
+    "header": null,
+    "value": "210204B-C",
+    "python_repr": "'210204B-C'",
+    "excel_type": "s",
+    "xml_type": "s",
+    "xml_literal": "40",
+    "number_format": "General"
+  },
+  {
+    "cell": "B5",
+    "header": "Sexe",
+    "value": "F",
+    "python_repr": "'F'",
+    "excel_type": "s",
+    "xml_type": "s",
+    "xml_literal": "38",
+    "number_format": "General"
+  },
+  {
+    "cell": "C5",
+    "header": "Age",
+    "value": 5,
+    "python_repr": "5",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "5",
+    "number_format": "General"
+  },
+  {
+    "cell": "D5",
+    "header": "NombreCrises",
+    "value": 6,
+    "python_repr": "6",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "6",
+    "number_format": "General"
+  },
+  {
+    "cell": "E5",
+    "header": "TypeAbs",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "F5",
+    "header": "DebCE1",
+    "value": 0.431828703703704,
+    "python_repr": "0.431828703703704",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "0.431828703703704",
+    "number_format": "General"
+  },
+  {
+    "cell": "G5",
+    "header": "FinCE1",
+    "value": 0.431886574074074,
+    "python_repr": "0.431886574074074",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "0.431886574074074",
+    "number_format": "General"
+  },
+  {
+    "cell": "H5",
+    "header": "DebCE2",
+    "value": 0.433668981481481,
+    "python_repr": "0.433668981481481",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "0.433668981481481",
+    "number_format": "General"
+  },
+  {
+    "cell": "I5",
+    "header": "FinCE2",
+    "value": 0.433726851851852,
+    "python_repr": "0.433726851851852",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "0.433726851851852",
+    "number_format": "General"
+  },
+  {
+    "cell": "J5",
+    "header": "DebCE3",
+    "value": 0.43630787037037,
+    "python_repr": "0.43630787037037",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "0.43630787037037",
+    "number_format": "General"
+  },
+  {
+    "cell": "K5",
+    "header": "FinCE3",
+    "value": 0.436365740740741,
+    "python_repr": "0.436365740740741",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "0.436365740740741",
+    "number_format": "General"
+  },
+  {
+    "cell": "L5",
+    "header": "DebCE4",
+    "value": 0.437905092592593,
+    "python_repr": "0.437905092592593",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "0.437905092592593",
+    "number_format": "General"
+  },
+  {
+    "cell": "M5",
+    "header": "FinCE4",
+    "value": 0.437939814814815,
+    "python_repr": "0.437939814814815",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "0.437939814814815",
+    "number_format": "General"
+  },
+  {
+    "cell": "N5",
+    "header": "DebutCE5",
+    "value": 0.438900462962963,
+    "python_repr": "0.438900462962963",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "0.438900462962963",
+    "number_format": "General"
+  },
+  {
+    "cell": "O5",
+    "header": "FinCE5",
+    "value": 0.438946759259259,
+    "python_repr": "0.438946759259259",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "0.438946759259259",
+    "number_format": "General"
+  },
+  {
+    "cell": "P5",
+    "header": "DebCE6",
+    "value": 0.444247685185185,
+    "python_repr": "0.444247685185185",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "0.444247685185185",
+    "number_format": "General"
+  },
+  {
+    "cell": "Q5",
+    "header": "FinCE6",
+    "value": 0.444305555555556,
+    "python_repr": "0.444305555555556",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "0.444305555555556",
+    "number_format": "General"
+  },
+  {
+    "cell": "R5",
+    "header": "DebCE7",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "S5",
+    "header": "FinCE7",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "T5",
+    "header": "DebCE8",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "U5",
+    "header": "FinCE8",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "V5",
+    "header": "DebCE9",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "W5",
+    "header": "FinCE9",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "X5",
+    "header": "DebCE10",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "Y5",
+    "header": "FinCE10",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "Z5",
+    "header": "DebtCE11",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "AA5",
+    "header": "FinCE11",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "AB5",
+    "header": "DebCE12",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "AC5",
+    "header": "FinCE12",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "AD5",
+    "header": "Intercrit1",
+    "value": 0.433796296296296,
+    "python_repr": "0.433796296296296",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "0.433796296296296",
+    "number_format": "General"
+  },
+  {
+    "cell": "AE5",
+    "header": "Intercrit2",
+    "value": 0.43380787037037,
+    "python_repr": "0.43380787037037",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "0.43380787037037",
+    "number_format": "General"
+  },
+  {
+    "cell": "AF5",
+    "header": "Intercrit3",
+    "value": 0.433819444444444,
+    "python_repr": "0.433819444444444",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "0.433819444444444",
+    "number_format": "General"
+  },
+  {
+    "cell": "AG5",
+    "header": "Intercrit4",
+    "value": 0.434814814814815,
+    "python_repr": "0.434814814814815",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "0.434814814814815",
+    "number_format": "General"
+  },
+  {
+    "cell": "AH5",
+    "header": "Intercrit5",
+    "value": 0.434872685185185,
+    "python_repr": "0.434872685185185",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "0.434872685185185",
+    "number_format": "General"
+  },
+  {
+    "cell": "AI5",
+    "header": "Intercrit6",
+    "value": 0.438391203703704,
+    "python_repr": "0.438391203703704",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "0.438391203703704",
+    "number_format": "General"
+  },
+  {
+    "cell": "AJ5",
+    "header": "Intercrit7",
+    "value": 0.439398148148148,
+    "python_repr": "0.439398148148148",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "0.439398148148148",
+    "number_format": "General"
+  },
+  {
+    "cell": "A6",
+    "header": null,
+    "value": "210208B-G",
+    "python_repr": "'210208B-G'",
+    "excel_type": "s",
+    "xml_type": "s",
+    "xml_literal": "41",
+    "number_format": "General"
+  },
+  {
+    "cell": "B6",
+    "header": "Sexe",
+    "value": "F",
+    "python_repr": "'F'",
+    "excel_type": "s",
+    "xml_type": "s",
+    "xml_literal": "38",
+    "number_format": "General"
+  },
+  {
+    "cell": "C6",
+    "header": "Age",
+    "value": 14,
+    "python_repr": "14",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "14",
+    "number_format": "General"
+  },
+  {
+    "cell": "D6",
+    "header": "NombreCrises",
+    "value": 4,
+    "python_repr": "4",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "4",
+    "number_format": "General"
+  },
+  {
+    "cell": "E6",
+    "header": "TypeAbs",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "F6",
+    "header": "DebCE1",
+    "value": 0.471678240740741,
+    "python_repr": "0.471678240740741",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "0.471678240740741",
+    "number_format": "General"
+  },
+  {
+    "cell": "G6",
+    "header": "FinCE1",
+    "value": 0.471793981481481,
+    "python_repr": "0.471793981481481",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "0.471793981481481",
+    "number_format": "General"
+  },
+  {
+    "cell": "H6",
+    "header": "DebCE2",
+    "value": 0.4725,
+    "python_repr": "0.4725",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "0.4725",
+    "number_format": "General"
+  },
+  {
+    "cell": "I6",
+    "header": "FinCE2",
+    "value": 0.472581018518519,
+    "python_repr": "0.472581018518519",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "0.472581018518519",
+    "number_format": "General"
+  },
+  {
+    "cell": "J6",
+    "header": "DebCE3",
+    "value": 0.475358796296296,
+    "python_repr": "0.475358796296296",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "0.475358796296296",
+    "number_format": "General"
+  },
+  {
+    "cell": "K6",
+    "header": "FinCE3",
+    "value": 0.475520833333333,
+    "python_repr": "0.475520833333333",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "0.475520833333333",
+    "number_format": "General"
+  },
+  {
+    "cell": "L6",
+    "header": "DebCE4",
+    "value": 0.478402777777778,
+    "python_repr": "0.478402777777778",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "0.478402777777778",
+    "number_format": "General"
+  },
+  {
+    "cell": "M6",
+    "header": "FinCE4",
+    "value": 0.478587962962963,
+    "python_repr": "0.478587962962963",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "0.478587962962963",
+    "number_format": "General"
+  },
+  {
+    "cell": "N6",
+    "header": "DebutCE5",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "O6",
+    "header": "FinCE5",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "P6",
+    "header": "DebCE6",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "Q6",
+    "header": "FinCE6",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "R6",
+    "header": "DebCE7",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "S6",
+    "header": "FinCE7",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "T6",
+    "header": "DebCE8",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "U6",
+    "header": "FinCE8",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "V6",
+    "header": "DebCE9",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "W6",
+    "header": "FinCE9",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "X6",
+    "header": "DebCE10",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "Y6",
+    "header": "FinCE10",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "Z6",
+    "header": "DebtCE11",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "AA6",
+    "header": "FinCE11",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "AB6",
+    "header": "DebCE12",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "AC6",
+    "header": "FinCE12",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  },
+  {
+    "cell": "AD6",
+    "header": "Intercrit1",
+    "value": 0.470358796296296,
+    "python_repr": "0.470358796296296",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "0.470358796296296",
+    "number_format": "General"
+  },
+  {
+    "cell": "AE6",
+    "header": "Intercrit2",
+    "value": 0.47037037037037,
+    "python_repr": "0.47037037037037",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "0.47037037037037",
+    "number_format": "General"
+  },
+  {
+    "cell": "AF6",
+    "header": "Intercrit3",
+    "value": 0.471412037037037,
+    "python_repr": "0.471412037037037",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "0.471412037037037",
+    "number_format": "General"
+  },
+  {
+    "cell": "AG6",
+    "header": "Intercrit4",
+    "value": 0.471574074074074,
+    "python_repr": "0.471574074074074",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "0.471574074074074",
+    "number_format": "General"
+  },
+  {
+    "cell": "AH6",
+    "header": "Intercrit5",
+    "value": 0.473402777777778,
+    "python_repr": "0.473402777777778",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "0.473402777777778",
+    "number_format": "General"
+  },
+  {
+    "cell": "AI6",
+    "header": "Intercrit6",
+    "value": 0.473865740740741,
+    "python_repr": "0.473865740740741",
+    "excel_type": "n",
+    "xml_type": "n (implicit)",
+    "xml_literal": "0.473865740740741",
+    "number_format": "General"
+  },
+  {
+    "cell": "AJ6",
+    "header": "Intercrit7",
+    "value": null,
+    "python_repr": "None",
+    "excel_type": "n",
+    "xml_type": "absent",
+    "xml_literal": null,
+    "number_format": "General"
+  }
+]
