@@ -1,4 +1,4 @@
-# eeg-absence-detector
+# EGG-Absence-Detector
 
 Automatic detection of absence-seizure periods from EEG. The current pipeline reads MATLAB timetables, aligns clock-time annotations, labels samples, creates overlapping windows, and extracts time- and frequency-domain features. Model training is intentionally deferred until the dataset report is reviewed.
 
