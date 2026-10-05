@@ -1,0 +1,89 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
+
+:root {
+  --app-panel: #ffffff;
+  --app-border: rgba(15, 23, 42, 0.08);
+  --app-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
+[data-mantine-color-scheme="light"] {
+  --mantine-color-body: #f6f8fb;
+}
+
+[data-mantine-color-scheme="dark"] {
+  --mantine-color-body: #0b1220;
+  --app-panel: #111a2e;
+  --app-border: rgba(148, 163, 184, 0.14);
+  --app-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 10px 28px rgba(0, 0, 0, 0.28);
+}
+
+body {
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-feature-settings: "cv11", "ss01";
+}
+
+.panel {
+  background: var(--app-panel);
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  box-shadow: var(--app-shadow);
+}
+
+.shell-surface {
+  background: var(--app-panel);
+  border-color: var(--app-border);
+}
+
+.mono {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.kpi-value {
+  font-size: 1.75rem;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.section-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  margin-right: 6px;
+}
+
+/* Plotly range slider handles, tuned for both schemes */
+.rangeslider-handle-min,
+.rangeslider-handle-max {
+  fill: #94a3b8 !important;
+  stroke: #64748b !important;
+}
+
+.js-plotly-plot .plotly .modebar {
+  right: 8px;
+}
+
+table .mono {
+  white-space: nowrap;
+}
+
+/* Plotly dims the part of the range slider outside the view; soften it per scheme */
+[data-mantine-color-scheme="light"] .rangeslider-mask-min,
+[data-mantine-color-scheme="light"] .rangeslider-mask-max {
+  fill: #0f172a !important;
+  fill-opacity: 0.10 !important;
+}
+
+[data-mantine-color-scheme="dark"] .rangeslider-mask-min,
+[data-mantine-color-scheme="dark"] .rangeslider-mask-max {
+  fill: #000000 !important;
+  fill-opacity: 0.35 !important;
+}

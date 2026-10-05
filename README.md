@@ -62,6 +62,33 @@ python scripts/train_models.py                                               # d
 
 `--skip-conversion` reuses the labeled per-recording Parquet files after checking their labels against the current annotations. Reports: [`docs/DATASET_PARTS_I_VI_OFFICIAL.md`](docs/DATASET_PARTS_I_VI_OFFICIAL.md), [`docs/PART_VII_ANALYSIS_OFFICIAL.md`](docs/PART_VII_ANALYSIS_OFFICIAL.md), [`docs/PARTS_VIII_IX.md`](docs/PARTS_VIII_IX.md).
 
+Temporal detection (Parts X–XI): out-of-fold probabilities, the final model, intervals and error analysis:
+
+```bash
+python scripts/predict_oof.py          # outputs/predictions_oof.parquet + models/rf_final.joblib
+python scripts/prepare_app_data.py     # filtered signals, recording metadata, technician events (data/processed/app/)
+python scripts/evaluate_detection.py   # threshold, outputs/detected_intervals.csv, figures, docs/PARTS_X_XI.md
+python scripts/detect.py --recording 190304A_E [--threshold 0.5]
+```
+
+## How to run the app
+
+The app only reads precomputed files, so run the three commands above once (after `build_dataset.py --annotations official`), then:
+
+```bash
+pip install -r requirements.txt
+python app.py
+```
+
+Open <http://127.0.0.1:8050>. Nothing is trained at startup. If a precomputed file is missing, the app shows which command to run instead of failing.
+
+- **Overview**: event-level metrics and a timeline of every recording (real seizures above, detections below). Click a row to open the recording.
+- **Recording**: stacked or overlaid EEG with full-resolution zoom, seizure probability with the threshold line, technician events, the spectrum of any clicked 2 s window, and the table of real vs detected intervals.
+- Controls: probability threshold (updates detections and metrics live), page length, gain, channel selection, page buttons or the ← → keys, jump to previous/next seizure, "Save view as PNG" and "Download intervals CSV".
+- The sun/moon button switches between the dark and light themes; `?theme=light&page=recording&recording=211104B_D` in the URL opens a given state directly.
+
+All probabilities shown are out-of-fold: each recording is scored by a model that never saw it. Fonts (Google Fonts) and icons (Iconify) are loaded from the internet; offline, the app falls back to system fonts and icons are not drawn. Screenshots in `outputs/figures/app/` are produced by `python scripts/screenshot_app.py`.
+
 The provisional counts and feature definition are documented in [`docs/DATASET_PARTS_I_VI.md`](docs/DATASET_PARTS_I_VI.md). `200625A_F` and `210427B_C` are excluded for the reasons recorded in `data/interim/exclusions.csv`.
 
 ## Project structure
@@ -69,6 +96,8 @@ The provisional counts and feature definition are documented in [`docs/DATASET_P
 - `src/io.py`: MATLAB timetable and annotation loading.
 - `src/labels.py`: sample-level binary labels.
 - `src/preprocessing.py`: band-pass filtering before segmentation.
+- `src/detection.py`: window probabilities → seizure intervals, event-level comparison with annotations.
+- `src/app_data.py`, `src/app_figures.py`, `assets/app.css`: data access, themed figures and styles for `app.py`.
 - `src/annotations.py`: provisional/official annotation resolution driven by `config/annotation_decisions.yaml`.
 - `src/segmentation.py`: 2 s windows with 50% overlap.
 - `src/features.py`: per-channel and across-channel time/frequency features.
