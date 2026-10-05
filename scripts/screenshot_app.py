@@ -83,8 +83,11 @@ def main() -> None:
         for theme in ("dark", "light"):
             driver.set_window_size(args.width, 900)
             driver.get(f"{base}/?theme={theme}&page=comparison&recording={args.recording}")
-            wait_for_plots(driver, "#timeline")
-            capture(driver, OUTPUT / f"comparison_{theme}{args.suffix}.png", args.width)
+            wait_for_plots(driver, "#comparison-figure")
+            capture(driver, OUTPUT / f"comparison_patient_{theme}{args.suffix}.png", args.width)
+            driver.find_element(By.XPATH, "//label[normalize-space()='All patients']").click()
+            time.sleep(3.0)
+            capture(driver, OUTPUT / f"comparison_all_{theme}{args.suffix}.png", args.width)
 
             for page in ("visualisation", "prediction"):
                 driver.set_window_size(args.width, 900)

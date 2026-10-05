@@ -319,70 +319,106 @@ def resampled_dict(figure: FigureResampler, view: tuple[float, float]) -> dict:
     return result
 
 
-# ----------------------------------------------------------------------------- overview
+# ----------------------------------------------------------------------------- comparison
 
 
-def overview_figure(metadata: pd.DataFrame, annotations: pd.DataFrame, detected: pd.DataFrame, matches: pd.DataFrame, theme: str) -> go.Figure:
-    """Gantt-style timeline: one row per recording, real seizures above detections."""
+def patient_comparison_figure(recording: str, duration: float, real: pd.DataFrame, results: dict[str, tuple], theme: str) -> go.Figure:
+    """One patient: the real seizures on the first row, then one row of detections per model.
+
+    ``results`` maps a model name to (detected intervals, event matches, metrics, threshold).
+    """
     tokens = THEMES[theme]
-    recordings = metadata["recording"].tolist()
-    position = {recording: len(recordings) - 1 - index for index, recording in enumerate(recordings)}
+    rows = ["Real seizures", *results]
+    position = {name: len(rows) - 1 - index for index, name in enumerate(rows)}
     figure = go.Figure()
     figure.add_trace(
         go.Bar(
-            y=[position[r] for r in recordings], x=metadata["duration_s"], base=0, orientation="h", width=0.74,
-            marker={"color": tokens["track"], "line": {"width": 0}}, name="Recording", customdata=recordings,
-            hovertemplate="<b>%{customdata}</b><br>duration %{x:.0f} s<br>click to open<extra></extra>",
+            y=list(position.values()), x=[duration] * len(rows), base=0, orientation="h", width=0.7,
+            marker={"color": tokens["track"], "line": {"width": 0}}, hoverinfo="skip", showlegend=False,
         )
     )
-    false_starts = set(zip(matches.loc[matches.status == "FP", "recording"], matches.loc[matches.status == "FP", "detected_start_s"]))
-    missed = set(zip(matches.loc[matches.status == "FN", "recording"], matches.loc[matches.status == "FN", "real_start_s"]))
 
-    def lane(frame: pd.DataFrame, name: str, color: str, offset: float, status) -> None:
+    def lane(frame: pd.DataFrame, row: str, name: str, color: str, group: str, show: bool, pattern: str = "") -> None:
         if frame.empty:
-            figure.add_trace(legend_key(name, color))
             return
-        y = [position[r] + offset for r in frame["recording"]]
-        durations = (frame["end_s"] - frame["start_s"]).to_numpy()
-        custom = np.stack([frame["recording"], frame["start_s"], frame["end_s"], [status(row) for row in frame.itertuples(index=False)]], axis=1)
-        hover = "<b>%{customdata[0]}</b><br>" + name + "<br>%{customdata[1]:.1f} s → %{customdata[2]:.1f} s<br>%{customdata[3]}<extra></extra>"
+        custom = np.stack([frame["start_s"], frame["end_s"]], axis=1)
+        hover = f"<b>{row}</b><br>{name}<br>%{{customdata[0]:.1f}} s → %{{customdata[1]:.1f}} s<extra></extra>"
+        y = [position[row]] * len(frame)
         figure.add_trace(
             go.Bar(
-                y=y, x=durations, base=frame["start_s"], orientation="h", width=0.30, name=name, legendgroup=name,
-                marker={"color": color, "line": {"width": 0}}, customdata=custom, hovertemplate=hover,
+                y=y, x=(frame["end_s"] - frame["start_s"]).to_numpy(), base=frame["start_s"], orientation="h", width=0.5,
+                name=name, legendgroup=group, showlegend=show, customdata=custom, hovertemplate=hover,
+                marker={"color": color, "line": {"width": 0}, "pattern": {"shape": pattern, "fgcolor": tokens["panel"], "size": 5}},
             )
         )
         # Tick markers keep short events visible when the bar is narrower than a pixel.
         figure.add_trace(
             go.Scatter(
-                x=(frame["start_s"] + frame["end_s"]) / 2, y=y, mode="markers", name=name, legendgroup=name, showlegend=False,
-                marker={"symbol": "line-ns", "size": 9, "line": {"color": color, "width": 2}}, customdata=custom, hovertemplate=hover,
+                x=(frame["start_s"] + frame["end_s"]) / 2, y=y, mode="markers", legendgroup=group, showlegend=False,
+                marker={"symbol": "line-ns", "size": 16, "line": {"color": color, "width": 2}}, customdata=custom, hovertemplate=hover,
             )
         )
 
-    lane(annotations, "Real seizure (annotation)", REAL, 0.17, lambda row: "missed" if (row.recording, row.start_s) in missed else "found")
-    lane(detected, "Detection", DETECTED, -0.17, lambda row: "false alarm" if (row.recording, row.start_s) in false_starts else "true detection")
-
-    counts = matches.groupby(["recording", "status"]).size().unstack(fill_value=0).reindex(index=recordings, columns=["TP", "FN", "FP"], fill_value=0)
-    annotations_list = [
-        {
-            "x": 1.0, "xref": "paper", "xanchor": "left", "y": position[recording], "yref": "y", "showarrow": False, "xshift": 8,
-            "text": f"{row.TP}/{row.TP + row.FN} found · {row.FP} false", "font": {"family": MONO_FONT, "size": 11, "color": tokens["muted"]},
-        }
-        for recording, row in counts.iterrows()
-    ]
-    layout = base_layout(theme)
-    layout["legend"]["traceorder"] = "normal"
+    lane(real, "Real seizures", "Real seizure (annotation)", REAL, "real", True)
+    shown_true = shown_false = False
+    notes = []
+    for model, (detected, matches, metrics, threshold) in results.items():
+        false_starts = set(matches.loc[matches["status"] == "FP", "detected_start_s"])
+        is_false = detected["start_s"].isin(false_starts) if len(detected) else pd.Series(dtype=bool)
+        lane(detected.loc[~is_false], model, "Detection on a real seizure", DETECTED, "true", not shown_true)
+        shown_true = shown_true or bool((~is_false).any())
+        lane(detected.loc[is_false], model, "False alarm", rgba(DETECTED, 0.55), "false", not shown_false, pattern="/")
+        shown_false = shown_false or bool(is_false.any())
+        total = metrics["tp"] + metrics["fn"]
+        notes.append((model, f"{metrics['tp']}/{total} found · {metrics['fp']} false"))
+    notes.append(("Real seizures", f"{len(real)} annotated"))
     figure.update_layout(
-        **layout, barmode="overlay", height=30 * len(recordings) + 110, margin={"l": 96, "r": 150, "t": 34, "b": 48},
-        annotations=annotations_list, hovermode="closest", bargap=0,
-        xaxis=axis_style(theme, title={"text": "Time since recording start", "font": {"size": 12, "color": tokens["muted"]}}, ticksuffix=" s", rangemode="tozero"),
+        **base_layout(theme), barmode="overlay", height=62 * len(rows) + 130, margin={"l": 120, "r": 150, "t": 56, "b": 48},
+        hovermode="closest", bargap=0,
+        annotations=[
+            {
+                "x": 1.0, "xref": "paper", "xanchor": "left", "y": position[row], "yref": "y", "showarrow": False, "xshift": 8,
+                "text": text, "font": {"family": MONO_FONT, "size": 11, "color": tokens["muted"]},
+            }
+            for row, text in notes
+        ],
+        xaxis=axis_style(theme, title={"text": f"Time since recording start — {recording}", "font": {"size": 12, "color": tokens["muted"]}}, ticksuffix=" s", range=[0, duration]),
         yaxis=axis_style(
             theme, tickvals=list(position.values()), ticktext=list(position.keys()), showgrid=False, zeroline=False,
-            range=[-0.6, len(recordings) - 0.4], fixedrange=True,
-            tickfont={"family": MONO_FONT, "size": 11, "color": tokens["text"]},
+            range=[-0.6, len(rows) - 0.4], fixedrange=True, tickfont={"size": 12, "color": tokens["text"]},
         ),
     )
+    return figure
+
+
+def models_bar_figure(comparison: pd.DataFrame, theme: str) -> go.Figure:
+    """All patients: event-level F1, recall and precision of every model, one panel per score."""
+    tokens = THEMES[theme]
+    scores = [("event_f1", "Event F1"), ("event_recall", "Recall"), ("event_precision", "Precision")]
+    color = tokens["regions"]["C"]
+    figure = go.Figure()
+    layout = {}
+    for index, (column, title) in enumerate(scores):
+        suffix = "" if index == 0 else str(index + 1)
+        left = index / len(scores) + (0.035 if index else 0)
+        layout[f"xaxis{suffix}"] = axis_style(theme, domain=[left, (index + 1) / len(scores) - 0.035], anchor=f"y{suffix}", showgrid=False, tickangle=0, tickfont={"size": 11, "color": tokens["text"]})
+        layout[f"yaxis{suffix}"] = axis_style(theme, anchor=f"x{suffix}", range=[0, 1.12], tickformat=".0%", tickvals=[0, 0.5, 1], fixedrange=True)
+        figure.add_trace(
+            go.Bar(
+                # Two-line names keep the labels apart on narrow screens.
+                x=[name.replace(" ", "<br>") for name in comparison["model"]], y=comparison[column],
+                xaxis=f"x{suffix}", yaxis=f"y{suffix}", width=0.55, showlegend=False,
+                marker={"color": color, "line": {"width": 0}, "cornerradius": 4},
+                text=[f"{value:.0%}" if column != "event_f1" else f"{value:.2f}" for value in comparison[column]],
+                textposition="outside", textfont={"family": MONO_FONT, "size": 12, "color": tokens["text"]}, cliponaxis=False,
+                hovertemplate=f"<b>%{{x}}</b><br>{title}: %{{y:.2f}}<extra></extra>",
+            )
+        )
+        figure.add_annotation(
+            x=(left + (index + 1) / len(scores) - 0.035) / 2, xref="paper", y=1.0, yref="paper", yanchor="bottom", showarrow=False,
+            text=title, font={"size": 13, "color": tokens["text"]},
+        )
+    figure.update_layout(**base_layout(theme), **layout, height=320, margin={"l": 48, "r": 16, "t": 40, "b": 56}, hovermode="closest")
     return figure
 
 

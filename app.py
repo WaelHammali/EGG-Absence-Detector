@@ -22,7 +22,7 @@ sys.path.insert(0, str(ROOT))
 
 from src import app_data
 from src.app_figures import (
-    DETECTED, EVENT, REAL, THRESHOLD, event_shapes, message_figure, overview_figure, recording_figure,
+    DETECTED, EVENT, REAL, THRESHOLD, event_shapes, message_figure, models_bar_figure, patient_comparison_figure, recording_figure,
     resampled_dict, spectrum_figure, view_relayout,
 )
 from src.io import CHANNELS
@@ -77,25 +77,6 @@ def panel(children, **kwargs):
 
 def swatch(color: str, text: str):
     return html.Span([html.Span(className="swatch", style={"background": color}), text])
-
-
-def kpi(title: str, value: str, subtitle: str, icon_name: str, color: str):
-    return panel(
-        dmc.Group(
-            [
-                dmc.ThemeIcon(icon(icon_name, 22), size=44, radius="md", variant="light", color=color),
-                dmc.Stack(
-                    [
-                        dmc.Text(title, size="xs", c="dimmed", fw=600, tt="uppercase"),
-                        dmc.Text(value, className="mono kpi-value"),
-                        dmc.Text(subtitle, size="xs", c="dimmed"),
-                    ],
-                    gap=2,
-                ),
-            ],
-            align="flex-start", wrap="nowrap", gap="md",
-        )
-    )
 
 
 def seconds(value) -> str:
@@ -343,7 +324,7 @@ def sidebar():
     )
 
 
-def overview_page():
+def comparison_page():
     return html.Div(
         dmc.Stack(
             [
@@ -353,46 +334,34 @@ def overview_page():
                             [
                                 dmc.Stack(
                                     [
-                                        dmc.Text("Model comparison", fw=600),
-                                        dmc.Text(
-                                            "Each model at its best threshold, tested on patients it never saw. Choose a model in the sidebar to see its results below.",
-                                            size="sm", c="dimmed",
-                                        ),
+                                        dmc.Text("Comparison of the four models", fw=600),
+                                        dmc.Text(id="comparison-caption", size="sm", c="dimmed"),
                                     ],
                                     gap=0,
                                 ),
-                                dmc.Badge("Out-of-fold predictions", variant="light", color="gray", leftSection=icon("tabler:shield-check", 12)),
+                                tip(
+                                    "Compare the models on the patient chosen in the sidebar, or on all patients together.",
+                                    dmc.SegmentedControl(
+                                        id="scope", value="patient", radius="md",
+                                        data=[{"value": "patient", "label": "Selected patient"}, {"value": "all", "label": "All patients"}],
+                                    ),
+                                ),
                             ],
-                            justify="space-between", align="flex-start", mb="xs",
+                            justify="space-between", align="flex-start", mb="sm",
                         ),
                         html.Div(id="model-table"),
                     ]
                 ),
-                html.Div(id="kpi-title"),
-                dmc.SimpleGrid(id="kpis", cols={"base": 2, "md": 3, "xl": 5}, spacing="md"),
                 panel(
                     [
-                        dmc.Group(
-                            [
-                                dmc.Stack(
-                                    [
-                                        dmc.Text("Seizure timeline of the selected model", fw=600),
-                                        dmc.Text(
-                                            "One row per patient: real seizures above, detections below. Click a row to open that patient in Prediction.",
-                                            size="sm", c="dimmed",
-                                        ),
-                                    ],
-                                    gap=0,
-                                ),
-                            ],
-                            justify="space-between", align="flex-start", mb="xs",
-                        ),
+                        html.Div(id="comparison-figure-title"),
                         dcc.Loading(
-                            dcc.Graph(id="timeline", config={"displaylogo": False, "modeBarButtonsToRemove": ["select2d", "lasso2d"]}),
+                            dcc.Graph(id="comparison-figure", config={"displaylogo": False, "modeBarButtonsToRemove": ["select2d", "lasso2d"]}),
                             delay_show=300, overlay_style={"visibility": "visible", "opacity": 0.5}, type="dot",
                         ),
                     ]
                 ),
+                html.Div(id="comparison-extra"),
             ],
             gap="md",
         ),
@@ -510,7 +479,7 @@ def layout():
                     dmc.AppShellMain(
                         [
                             dmc.Alert(id="error", title="Something went wrong", color="red", icon=icon("tabler:alert-circle"), hide=True, withCloseButton=True, mb="md"),
-                            overview_page(),
+                            comparison_page(),
                             recording_page(),
                         ]
                     ),
@@ -565,7 +534,8 @@ def apply_theme(theme):
 def show_page(page):
     shown, hidden = {"display": "block"}, {"display": "none"}
     if page == "comparison":
-        return shown, hidden, hidden, shown
+        # No model to choose here: the four are always shown together.
+        return shown, hidden, hidden, hidden
     return hidden, shown, shown, (shown if page == "prediction" else hidden)
 
 
@@ -591,66 +561,107 @@ def show_all_channels(_):
 # ----------------------------------------------------------------------------- overview
 
 
-def model_table(selected: str, recording: str):
-    """All models side by side: overall scores and the result on the selected patient."""
-    head = ["Model", "Threshold", "Event F1", "Recall", "Precision", "Found / missed", "False alarms", "Window F1", f"On {recording}"]
-    best = DATA.comparison["event_f1"].max()
-    rows = []
-    for row in DATA.comparison.itertuples(index=False):
-        _, _, patient = DATA.detect(recording, row.threshold, row.model)
-        name = [dmc.Text(row.model, fw=600, size="sm", span=True)]
-        if row.model == selected:
-            name.append(dmc.Badge("Selected", size="xs", variant="light", color="teal", ml=6))
-        if row.event_f1 == best:
-            name.append(dmc.Badge("Best F1", size="xs", variant="light", color="violet", ml=6))
-        cells = [
-            name, f"{row.threshold:.2f}", f"{row.event_f1:.2f}", f"{row.event_recall:.0%}", f"{row.event_precision:.0%}",
-            f"{row.found} / {row.missed}", f"{row.false_alarms} ({row.false_alarms_per_hour:.1f}/h)", f"{row.window_f1:.2f}",
-            f"{patient['tp']}/{patient['tp'] + patient['fn']} found · {patient['fp']} false",
-        ]
-        rows.append(dmc.TableTr([dmc.TableTd(cell, className="" if index == 0 else "mono") for index, cell in enumerate(cells)]))
+def data_table(head: list[str], rows: list[list], min_width: int, highlight: int | None = None, max_height: int | None = None):
+    body = [
+        dmc.TableTr(
+            [dmc.TableTd(cell, className="" if index == 0 else "mono", style={"whiteSpace": "nowrap"}) for index, cell in enumerate(cells)],
+            **({"bg": "var(--mantine-color-teal-light)"} if number == highlight else {}),
+        )
+        for number, cells in enumerate(rows)
+    ]
     return dmc.TableScrollContainer(
         dmc.Table(
-            [dmc.TableThead(dmc.TableTr([dmc.TableTh(name, style={"whiteSpace": "nowrap"}) for name in head])), dmc.TableTbody(rows)],
-            striped=True, highlightOnHover=True, verticalSpacing=8, fz="sm",
+            [dmc.TableThead(dmc.TableTr([dmc.TableTh(name, style={"whiteSpace": "nowrap"}) for name in head])), dmc.TableTbody(body)],
+            striped=highlight is None, highlightOnHover=True, verticalSpacing=8, fz="sm", stickyHeader=max_height is not None,
         ),
-        minWidth=860, type="native",
+        minWidth=min_width, type="native", **({"mah": max_height} if max_height else {}),
     )
 
 
-@app.callback(
-    Output("model-table", "children"), Output("kpi-title", "children"), Output("kpis", "children"), Output("timeline", "figure"),
-    Input("threshold", "value"), Input("theme", "data"), Input("model", "value"), Input("recording", "value"),
-)
-def comparison(threshold, theme, model, recording):
-    detected, matches, metrics = DATA.detect_everything(threshold, model)
+def model_name(model: str, best: bool):
+    name = [dmc.Text(model, fw=600, size="sm", span=True, style={"whiteSpace": "nowrap"})]
+    if best:
+        name.append(dmc.Badge("Best", size="xs", variant="light", color="violet", ml=6))
+    return name
+
+
+def percent(value) -> str:
+    return "—" if pd.isna(value) else f"{value:.0%}"
+
+
+SHORT_VERDICT = {"Predicts well": "Well", "Partly correct": "Partly", "Predicts poorly": "Poorly"}
+
+
+def verdict_label(metrics: dict) -> tuple[str, str, str]:
+    """Label, color and icon for one model on one patient."""
     total = metrics["tp"] + metrics["fn"]
-    cards = [
-        kpi("Event F1", f"{metrics['f1']:.2f}", "balance of recall and precision", "tabler:target-arrow", "teal"),
-        kpi("Recall", f"{metrics['recall']:.0%}", f"{metrics['tp']} of {total} seizures found", "tabler:radar-2", "teal"),
-        kpi("Precision", f"{metrics['precision']:.0%}", f"of {metrics['detections']} detections", "tabler:focus-2", "blue"),
-        kpi("Found / missed", f"{metrics['tp']} / {metrics['fn']}", "annotated seizures", "tabler:checks", "green"),
-        kpi("False alarms", f"{metrics['fp']}", f"{metrics['false_alarms_per_hour']:.1f} per recorded hour", "tabler:alert-triangle", "red"),
-    ]
-    title = dmc.Text(
-        ["Selected model: ", dmc.Text(model, fw=700, span=True), " at threshold ", dmc.Text(f"{threshold:.2f}", className="mono", span=True), ", all patients"],
-        size="sm", c="dimmed",
-    )
-    return model_table(model, recording), title, cards, overview_figure(DATA.metadata, DATA.annotations, detected, matches, theme)
+    if total and metrics["fn"] == 0 and metrics["fp"] == 0:
+        return "Predicts well", "teal", "tabler:circle-check"
+    if total and (metrics["tp"] < total / 2 or metrics["fp"] > 2 * total):
+        return "Predicts poorly", "red", "tabler:circle-x"
+    return "Partly correct", "yellow", "tabler:alert-circle"
 
 
 @app.callback(
-    Output("recording", "value", allow_duplicate=True), Output("page", "value", allow_duplicate=True),
-    Input("timeline", "clickData"), prevent_initial_call=True,
+    Output("comparison-caption", "children"), Output("model-table", "children"), Output("comparison-figure-title", "children"),
+    Output("comparison-figure", "figure"), Output("comparison-extra", "children"),
+    Input("scope", "value"), Input("recording", "value"), Input("theme", "data"),
 )
-def open_recording(click):
-    if not click:
-        return no_update, no_update
-    custom = click["points"][0].get("customdata")
-    recording = custom if isinstance(custom, str) else (custom[0] if custom else None)
-    if recording not in DATA.recordings:
-        return no_update, no_update
-    return recording, "prediction"
+def comparison(scope, recording, theme):
+    models = DATA.comparison
+    note = "Each model uses its own best threshold and is tested on patients it never saw during training."
+    if scope == "patient":
+        results = {}
+        for row in models.itertuples(index=False):
+            detected, matches, metrics = DATA.detect(recording, row.threshold, row.model)
+            results[row.model] = (detected, matches, metrics, row.threshold)
+        # Best on this patient: most seizures found, then fewest false alarms.
+        rank = lambda name: (results[name][2]["tp"], -results[name][2]["fp"])
+        top = max(rank(name) for name in results)
+        rows = []
+        for model, (_, _, metrics, threshold) in results.items():
+            label, color, icon_name = verdict_label(metrics)
+            window = metrics["window"]
+            rows.append(
+                [
+                    model_name(model, rank(model) == top), f"{threshold:.2f}",
+                    dmc.Badge(SHORT_VERDICT[label], color=color, variant="light", leftSection=icon(icon_name, 12), miw=84, style={"flexShrink": 0}),
+                    f"{metrics['tp']} / {metrics['tp'] + metrics['fn']}", str(metrics["fn"]), str(metrics["fp"]),
+                    f"{metrics['f1']:.2f}", percent(window["recall"]), percent(window["precision"]),
+                ]
+            )
+        head = ["Model", "Threshold", "Prediction", "Seizures found", "Missed", "False alarms", "Event F1", "Window recall", "Window precision"]
+        info = DATA.info(recording)
+        title = card_title(f"Real seizures and detections of each model — {recording}", "hatched = false alarm")
+        figure = patient_comparison_figure(recording, float(info["duration_s"]), DATA.real(recording), results, theme)
+        return f"Patient {recording}. {note}", data_table(head, rows, 900), title, figure, None
+
+    best = models.loc[models["event_f1"].idxmax(), "model"]
+    rows = [
+        [
+            model_name(row.model, row.model == best), f"{row.threshold:.2f}", f"{row.event_f1:.2f}", f"{row.event_recall:.0%}",
+            f"{row.event_precision:.0%}", f"{row.found} / {row.found + row.missed}", str(row.missed),
+            f"{row.false_alarms} ({row.false_alarms_per_hour:.1f}/h)", f"{row.window_f1:.2f}",
+        ]
+        for row in models.itertuples(index=False)
+    ]
+    head = ["Model", "Threshold", "Event F1", "Recall", "Precision", "Seizures found", "Missed", "False alarms", "Window F1"]
+    patient_rows = []
+    for patient in DATA.recordings:
+        cells = [dmc.Text(patient, className="mono", size="sm", span=True), str(int(DATA.info(patient)["seizures"]))]
+        for row in models.itertuples(index=False):
+            _, _, metrics = DATA.detect(patient, row.threshold, row.model)
+            cells.append(f"{metrics['tp']}/{metrics['tp'] + metrics['fn']} · {metrics['fp']} false")
+        patient_rows.append(cells)
+    extra = panel(
+        [
+            card_title("Every patient, every model", "seizures found / real seizures · false alarms; the selected patient is highlighted"),
+            data_table(["Patient", "Real seizures", *models["model"]], patient_rows, 820, highlight=DATA.recordings.index(recording), max_height=520),
+        ]
+    )
+    title = card_title("Scores on all patients", "recall = real seizures found; precision = detections that are real seizures")
+    total = int(models["found"].iloc[0] + models["missed"].iloc[0])
+    return f"All {len(DATA.recordings)} patients, {total} real seizures. {note}", data_table(head, rows, 900), title, models_bar_figure(models, theme), extra
 
 
 # ----------------------------------------------------------------------------- recording page
@@ -679,12 +690,7 @@ def real_table(real: pd.DataFrame):
 def verdict(model: str, threshold: float, metrics: dict):
     """Plain statement of how the model did on this patient, with the rule used for the label."""
     total = metrics["tp"] + metrics["fn"]
-    if total and metrics["fn"] == 0 and metrics["fp"] == 0:
-        label, color, icon_name = "Predicts well", "teal", "tabler:circle-check"
-    elif total and (metrics["tp"] < total / 2 or metrics["fp"] > 2 * total):
-        label, color, icon_name = "Predicts poorly", "red", "tabler:circle-x"
-    else:
-        label, color, icon_name = "Partly correct", "yellow", "tabler:alert-circle"
+    label, color, icon_name = verdict_label(metrics)
     window = metrics["window"]
     share = lambda value: "—" if pd.isna(value) else f"{value:.0%}"
     sentence = (
