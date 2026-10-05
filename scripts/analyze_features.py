@@ -51,6 +51,13 @@ def class_statistics(frame: pd.DataFrame, features: list[str]) -> pd.DataFrame:
         pooled = np.sqrt(((len(zero) - 1) * zero.var(ddof=1) + (len(one) - 1) * one.var(ddof=1)) / max(len(zero) + len(one) - 2, 1))
         effect = (one.mean() - zero.mean()) / pooled if pooled > 0 else np.nan
         auc = roc_auc_score(target, values)
+        # Pooled AUC can reflect between-recording differences; also score within each recording.
+        within = [
+            roc_auc_score(group["class"], group[feature])
+            for _, group in frame.groupby("recording")
+            if group["class"].nunique() == 2
+        ]
+        within_auc = float(np.median(within))
         rows.append(
             {
                 "feature": feature,
@@ -61,7 +68,9 @@ def class_statistics(frame: pd.DataFrame, features: list[str]) -> pd.DataFrame:
                 "cohens_d": effect,
                 "roc_auc": auc,
                 "separation_auc": max(auc, 1 - auc),
-                "higher_in_class": 1 if one.mean() > zero.mean() else 0,
+                "within_recording_auc_median": within_auc,
+                "within_recording_separation_auc": max(within_auc, 1 - within_auc),
+                "higher_in_class": 1 if np.median(one) > np.median(zero) else 0,
             }
         )
     return pd.DataFrame(rows).sort_values(["separation_auc", "cohens_d"], ascending=[False, False])
@@ -85,6 +94,26 @@ def high_correlation_pairs(correlation: pd.DataFrame, threshold: float = 0.95) -
     return pd.DataFrame(rows).sort_values("absolute_correlation", ascending=False) if rows else pd.DataFrame(
         columns=["feature_1", "feature_2", "correlation", "absolute_correlation"]
     )
+
+
+def redundancy_groups(correlation: pd.DataFrame, threshold: float = 0.95) -> list[list[str]]:
+    """Connected components of the |rho| >= threshold graph, largest first."""
+    adjacency = (correlation.abs().to_numpy() >= threshold)
+    names = correlation.index.tolist()
+    unseen = set(range(len(names)))
+    groups = []
+    while unseen:
+        stack = [unseen.pop()]
+        component = []
+        while stack:
+            node = stack.pop()
+            component.append(node)
+            neighbours = [other for other in np.flatnonzero(adjacency[node]) if other in unseen]
+            unseen.difference_update(neighbours)
+            stack.extend(neighbours)
+        if len(component) > 1:
+            groups.append(sorted(names[index] for index in component))
+    return sorted(groups, key=len, reverse=True)
 
 
 def boxplots(frame: pd.DataFrame, output: Path) -> None:
@@ -119,19 +148,35 @@ def boxplots(frame: pd.DataFrame, output: Path) -> None:
     plt.close(figure)
 
 
-def heatmaps(correlation: pd.DataFrame, average_correlation: pd.DataFrame, output_dir: Path) -> None:
+def heatmaps(correlation: pd.DataFrame, average_columns: list[str], output_dir: Path, method: str) -> None:
+    label = {"pearson": "Pearson r", "spearman": "Spearman ρ"}[method]
+    suffix = "" if method == "pearson" else f"_{method}"
     figure, axis = plt.subplots(figsize=(13, 11), constrained_layout=True)
-    sns.heatmap(average_correlation, cmap="vlag", center=0, vmin=-1, vmax=1, annot=True, fmt=".2f", ax=axis)
-    axis.set_title("Q11 — Corrélation des caractéristiques moyennes sur les 8 canaux")
-    figure.savefig(output_dir / "correlation_average_features.png", dpi=180)
+    sns.heatmap(
+        correlation.loc[average_columns, average_columns],
+        cmap="vlag", center=0, vmin=-1, vmax=1, annot=True, fmt=".2f", ax=axis,
+        cbar_kws={"label": label},
+    )
+    axis.set_title(f"Q11 — Corrélation ({label}) des caractéristiques moyennes sur les 8 canaux")
+    figure.savefig(output_dir / f"correlation_average_features{suffix}.png", dpi=180)
     plt.close(figure)
 
+    # Order by feature type, then channel, so same-feature blocks sit on the diagonal.
+    ordered = sorted(correlation.index, key=lambda name: (name.split("_", 1)[1], name.split("_", 1)[0]))
+    matrix = correlation.loc[ordered, ordered]
     figure, axis = plt.subplots(figsize=(24, 21), constrained_layout=True)
-    sns.heatmap(correlation, cmap="vlag", center=0, vmin=-1, vmax=1, xticklabels=False, yticklabels=False, ax=axis)
-    axis.set_title("Q11 — Matrice de corrélation des 144 caractéristiques")
-    axis.set_xlabel("Caractéristiques")
-    axis.set_ylabel("Caractéristiques")
-    figure.savefig(output_dir / "correlation_all_features.png", dpi=160)
+    sns.heatmap(matrix, cmap="vlag", center=0, vmin=-1, vmax=1, xticklabels=False, yticklabels=False, ax=axis, cbar_kws={"label": label})
+    feature_names = [name.split("_", 1)[1] for name in ordered]
+    boundaries = [index for index in range(1, len(feature_names)) if feature_names[index] != feature_names[index - 1]]
+    for boundary in boundaries:
+        axis.axhline(boundary, color="white", linewidth=1)
+        axis.axvline(boundary, color="white", linewidth=1)
+    centers = [(start + end) / 2 for start, end in zip([0, *boundaries], [*boundaries, len(ordered)])]
+    groups = [feature_names[int(start)] for start in [0, *boundaries]]
+    axis.set_xticks(centers, groups, rotation=90)
+    axis.set_yticks(centers, groups, rotation=0)
+    axis.set_title(f"Q11 — Matrice de corrélation ({label}) des {len(ordered)} caractéristiques (8 canaux + moyenne par bloc)")
+    figure.savefig(output_dir / f"correlation_all_features{suffix}.png", dpi=160)
     plt.close(figure)
 
 
@@ -140,12 +185,21 @@ def write_report(
     frame: pd.DataFrame,
     statistics: pd.DataFrame,
     pairs: pd.DataFrame,
-    average_correlation: pd.DataFrame,
-    output_dir: Path,
+    pearson: pd.DataFrame,
+    spearman: pd.DataFrame,
+    average_columns: list[str],
 ) -> None:
     selected = statistics.set_index("feature").loc[[feature for feature in Q10_FEATURES if feature in statistics["feature"].values]].reset_index()
     top = statistics.head(15)
-    average_pairs = high_correlation_pairs(average_correlation, 0.90)
+    average_spearman = spearman.loc[average_columns, average_columns]
+    average_pearson = pearson.loc[average_columns, average_columns]
+    average_pairs = high_correlation_pairs(average_spearman, 0.90)
+    groups = redundancy_groups(spearman, 0.95)
+    spearman_pairs = high_correlation_pairs(spearman, 0.95)
+    within_top = statistics.sort_values("within_recording_separation_auc", ascending=False).head(10)
+    dc_features = [f"avg_{name}" for name in ("mean", "min", "max", "rms", "energy")]
+    dc = statistics.set_index("feature").loc[dc_features]
+    figure_base = "../outputs/figures/" + mode + "/part_vii/"
     lines = [
         f"# Partie VII — Analyse exploratoire ({mode})",
         "",
@@ -155,45 +209,93 @@ def write_report(
         "",
         "Les boxplots utilisent une échelle logarithmique car l’énergie et les puissances spectrales sont très asymétriques. Les valeurs aberrantes ne sont pas affichées dans les boîtes, mais elles restent présentes dans les calculs.",
         "",
-        "| Caractéristique | Médiane classe 0 | Médiane classe 1 | Cohen d | AUC séparatrice | Plus élevée en classe |",
-        "|---|---:|---:|---:|---:|---:|",
+        "| Caractéristique | Médiane classe 0 | Médiane classe 1 | Cohen d | AUC séparatrice (globale) | AUC séparatrice (médiane intra-enregistrement) | Plus élevée en classe |",
+        "|---|---:|---:|---:|---:|---:|---:|",
     ]
     for row in selected.itertuples(index=False):
         lines.append(
-            f"| {row.feature} | {row.class_0_median:.6g} | {row.class_1_median:.6g} | {row.cohens_d:.3f} | {row.separation_auc:.3f} | {row.higher_in_class} |"
+            f"| {row.feature} | {row.class_0_median:.6g} | {row.class_1_median:.6g} | {row.cohens_d:.3f} | "
+            f"{row.separation_auc:.3f} | {row.within_recording_separation_auc:.3f} | {row.higher_in_class} |"
         )
     lines += [
         "",
-        "Le graphique correspondant est [class_comparisons.png](../outputs/figures/" + mode + "/part_vii/class_comparisons.png). Une AUC séparatrice proche de 1 indique une bonne séparation univariée; 0,5 indique une absence de séparation.",
+        f"Le graphique correspondant est [class_comparisons.png]({figure_base}class_comparisons.png). Une AUC séparatrice proche de 1 indique une bonne séparation univariée; 0,5 indique une absence de séparation. L’AUC globale mélange toutes les fenêtres; l’AUC intra-enregistrement est calculée dans chaque enregistrement puis résumée par la médiane, ce qui neutralise les différences de niveau entre enregistrements. « Plus élevée en classe » compare les médianes.",
         "",
-        "### Caractéristiques les plus discriminantes",
+        "Les distributions sont très asymétriques : un Cohen d faible (calculé sur les moyennes et écarts-types) peut coexister avec une AUC élevée (fondée sur les rangs). L’AUC est donc la mesure de référence ici.",
         "",
-        "| Rang | Caractéristique | AUC séparatrice | Cohen d | Direction moyenne |",
-        "|---:|---|---:|---:|---|",
+        "### Caractéristiques les plus discriminantes (AUC globale)",
+        "",
+        "| Rang | Caractéristique | AUC globale | AUC intra-enregistrement | Cohen d | Direction (médianes) |",
+        "|---:|---|---:|---:|---:|---|",
     ]
     for rank, row in enumerate(top.itertuples(index=False), 1):
         direction = "crise > hors crise" if row.higher_in_class == 1 else "crise < hors crise"
-        lines.append(f"| {rank} | {row.feature} | {row.separation_auc:.3f} | {row.cohens_d:.3f} | {direction} |")
+        lines.append(
+            f"| {rank} | {row.feature} | {row.separation_auc:.3f} | {row.within_recording_separation_auc:.3f} | {row.cohens_d:.3f} | {direction} |"
+        )
     lines += [
         "",
-        "Ces résultats mesurent chaque variable séparément. Ils ne remplacent pas une évaluation par enregistrement et ne constituent pas encore un modèle prédictif.",
+        "### Caractéristiques les plus discriminantes à l’intérieur des enregistrements",
+        "",
+        "| Rang | Caractéristique | AUC intra-enregistrement | AUC globale |",
+        "|---:|---|---:|---:|",
+    ]
+    for rank, row in enumerate(within_top.itertuples(index=False), 1):
+        lines.append(f"| {rank} | {row.feature} | {row.within_recording_separation_auc:.3f} | {row.separation_auc:.3f} |")
+    lines += [
+        "",
+        "### Avertissement : composante continue (offset DC)",
+        "",
+        "Plusieurs enregistrements ont une moyenne de signal très éloignée de zéro (médiane par enregistrement de `avg_mean` entre environ −830 et +1000), ce qui indique un signal non filtré passe-haut. `mean`, `min`, `max`, `rms` et `energy` sont calculés sans retrait de la moyenne : leur niveau dépend donc de cet offset propre à chaque enregistrement. À l’intérieur d’un enregistrement (offset constant), `min` et `max` suivent encore l’amplitude des pointes-ondes, mais entre enregistrements l’offset domine, d’où l’écart entre AUC globale et AUC intra-enregistrement :",
+        "",
+        "| Caractéristique | AUC globale | AUC intra-enregistrement |",
+        "|---|---:|---:|",
+    ]
+    for feature, row in dc.iterrows():
+        lines.append(f"| {feature} | {row.separation_auc:.3f} | {row.within_recording_separation_auc:.3f} |")
+    lines += [
+        "",
+        "Un modèle évalué sur des enregistrements non vus risque d’utiliser ces variables pour reconnaître l’enregistrement plutôt que la crise. `std`, `variance`, `amplitude` (crête à crête) et les puissances spectrales (calculées après retrait de la moyenne) ne sont pas affectées. À décider avant les modèles : retirer ces variables ou retirer la moyenne de chaque fenêtre.",
+        "",
+        "Ces résultats mesurent chaque variable séparément et ne constituent pas encore un modèle prédictif.",
         "",
         "## Q11 — Corrélations et redondance",
         "",
-        f"La matrice complète contient {len(pairs)} paires avec |r| ≥ 0,95. La matrice des 16 moyennes inter-canaux contient {len(average_pairs)} paires avec |r| ≥ 0,90.",
+        "Deux matrices sont calculées. Pearson mesure une relation linéaire et est dominée par les valeurs extrêmes (artefacts) de ces distributions asymétriques. Spearman mesure une relation monotone sur les rangs : c’est la mesure retenue pour juger la redondance, car `variance = std²` ou `energy ∝ rms²` sont des relations parfaitement monotones mais non linéaires.",
         "",
-        "Paires moyennes fortement corrélées :",
+        f"- Paires avec |r de Pearson| ≥ 0,95 : {len(pairs)} sur {len(pearson) * (len(pearson) - 1) // 2}.",
+        f"- Paires avec |ρ de Spearman| ≥ 0,95 : {len(spearman_pairs)}.",
         "",
-        "| Caractéristique 1 | Caractéristique 2 | Corrélation |",
+        "Exemples Pearson vs Spearman sur les moyennes inter-canaux :",
+        "",
+        "| Paire | Pearson r | Spearman ρ |",
+        "|---|---:|---:|",
+    ]
+    for first, second in [("avg_std", "avg_variance"), ("avg_rms", "avg_energy"), ("avg_std", "avg_amplitude"), ("avg_theta_power", "avg_alpha_power")]:
+        lines.append(f"| {first} / {second} | {average_pearson.loc[first, second]:.3f} | {average_spearman.loc[first, second]:.3f} |")
+    lines += [
+        "",
+        "### Caractéristiques fortement corrélées (moyennes inter-canaux, |ρ| ≥ 0,90)",
+        "",
+        "| Caractéristique 1 | Caractéristique 2 | Spearman ρ |",
         "|---|---|---:|",
     ]
-    for row in average_pairs.head(20).itertuples(index=False):
+    for row in average_pairs.itertuples(index=False):
         lines.append(f"| {row.feature_1} | {row.feature_2} | {row.correlation:.3f} |")
     lines += [
         "",
-        "Les redondances attendues sont `std` avec `variance`, `RMS` avec `energy`, et les versions absolues d’une même bande entre canaux voisins. Les puissances relatives partagent le même dénominateur 0,5–30 Hz et peuvent également être corrélées ou anticorrélées. Une sélection de variables devra conserver une seule représentation parmi les groupes presque équivalents avant les modèles sensibles à la colinéarité.",
+        "### Groupes redondants (|ρ| ≥ 0,95, toutes caractéristiques)",
         "",
-        "Figures : [corrélations moyennes](../outputs/figures/" + mode + "/part_vii/correlation_average_features.png) et [matrice complète](../outputs/figures/" + mode + "/part_vii/correlation_all_features.png). Les tableaux complets sont dans `outputs/feature_class_comparison_" + mode + ".csv` et `outputs/high_correlations_" + mode + ".csv`.",
+        "Chaque groupe est une composante connexe : ses membres sont reliés par des chaînes de paires avec |ρ| ≥ 0,95. Un seul représentant par groupe suffit avant les modèles sensibles à la colinéarité.",
+        "",
+    ]
+    auc = statistics.set_index("feature")["within_recording_separation_auc"]
+    for index, group in enumerate(groups, 1):
+        best = max(group, key=lambda name: auc[name])
+        lines.append(f"{index}. ({len(group)}) {', '.join(f'`{name}`' for name in group)} — représentant suggéré : `{best}` (meilleure AUC intra-enregistrement {auc[best]:.3f}).")
+    lines += [
+        "",
+        f"Figures : corrélations moyennes [Spearman]({figure_base}correlation_average_features_spearman.png) et [Pearson]({figure_base}correlation_average_features.png); matrice complète [Spearman]({figure_base}correlation_all_features_spearman.png) et [Pearson]({figure_base}correlation_all_features.png). Tableaux : `outputs/feature_class_comparison_{mode}.csv`, `outputs/high_correlations_{mode}.csv` (Pearson), `outputs/high_correlations_spearman_{mode}.csv`, `outputs/feature_correlations_{mode}.csv` et `outputs/feature_correlations_spearman_{mode}.csv`.",
         "",
     ]
     (ROOT / f"docs/PART_VII_ANALYSIS_{mode.upper()}.md").write_text("\n".join(lines))
@@ -214,18 +316,22 @@ def main() -> None:
 
     statistics = class_statistics(frame, feature_columns)
     correlation = frame[feature_columns].corr(method="pearson")
+    spearman = frame[feature_columns].corr(method="spearman")
     average_columns = [column for column in feature_columns if column.startswith("avg_")]
-    average_correlation = correlation.loc[average_columns, average_columns]
     pairs = high_correlation_pairs(correlation)
 
     statistics.to_csv(ROOT / f"outputs/feature_class_comparison_{mode}.csv", index=False)
     pairs.to_csv(ROOT / f"outputs/high_correlations_{mode}.csv", index=False)
+    high_correlation_pairs(spearman).to_csv(ROOT / f"outputs/high_correlations_spearman_{mode}.csv", index=False)
     correlation.to_csv(ROOT / f"outputs/feature_correlations_{mode}.csv")
+    spearman.to_csv(ROOT / f"outputs/feature_correlations_spearman_{mode}.csv")
     boxplots(frame, output_dir / "class_comparisons.png")
-    heatmaps(correlation, average_correlation, output_dir)
-    write_report(mode, frame, statistics, pairs, average_correlation, output_dir)
+    heatmaps(correlation, average_columns, output_dir, "pearson")
+    heatmaps(spearman, average_columns, output_dir, "spearman")
+    write_report(mode, frame, statistics, pairs, correlation, spearman, average_columns)
     print(f"Part VII report: {ROOT / f'docs/PART_VII_ANALYSIS_{mode.upper()}.md'}")
-    print(f"Top discriminants:\n{statistics.head(10)[['feature', 'separation_auc', 'cohens_d']].to_string(index=False)}")
+    columns = ["feature", "separation_auc", "within_recording_separation_auc", "cohens_d"]
+    print(f"Top discriminants:\n{statistics.head(10)[columns].to_string(index=False)}")
     print(f"Highly correlated pairs |r|>=0.95: {len(pairs)}")
 
 
