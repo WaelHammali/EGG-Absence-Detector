@@ -1,0 +1,76 @@
+{
+  "dataset": "data/processed/windows_features_official.parquet",
+  "features": 144,
+  "seed": 42,
+  "random_split": {
+    "train_windows": 25135,
+    "train_class_1": 995,
+    "balanced_train_windows": 1990,
+    "balanced_train_class_1": 995,
+    "test_windows": 6284,
+    "test_class_1": 249
+  },
+  "group_folds": [
+    {
+      "fold": 1,
+      "test_recordings": [
+        "230102B_F",
+        "230105B_H",
+        "230718A_A"
+      ],
+      "test_windows": 6028,
+      "test_class_1": 263,
+      "balanced_train_windows": 1962
+    },
+    {
+      "fold": 2,
+      "test_recordings": [
+        "210504B_C",
+        "230406B_A",
+        "230515B_G"
+      ],
+      "test_windows": 5550,
+      "test_class_1": 230,
+      "balanced_train_windows": 2028
+    },
+    {
+      "fold": 3,
+      "test_recordings": [
+        "191113A_D",
+        "210204B_C",
+        "211104B_D",
+        "220121B_D",
+        "230210B_D"
+      ],
+      "test_windows": 6707,
+      "test_class_1": 168,
+      "balanced_train_windows": 2152
+    },
+    {
+      "fold": 4,
+      "test_recordings": [
+        "190304A_E",
+        "210208B_G",
+        "210427B_C",
+        "210928B_B",
+        "230519A_E"
+      ],
+      "test_windows": 6576,
+      "test_class_1": 168,
+      "balanced_train_windows": 2152
+    },
+    {
+      "fold": 5,
+      "test_recordings": [
+        "210406A_F",
+        "210914B_A",
+        "211027B_C",
+        "220106A_A",
+        "230224B_B"
+      ],
+      "test_windows": 6558,
+      "test_class_1": 415,
+      "balanced_train_windows": 1658
+    }
+  ]
+}

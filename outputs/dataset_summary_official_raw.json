@@ -18,14 +18,7 @@
       "O2"
     ],
     "preprocessing": {
-      "method": "bandpass",
-      "filter": "Butterworth, zero-phase (scipy.signal.sosfiltfilt)",
-      "band_hz": [
-        0.5,
-        40.0
-      ],
-      "order": 4,
-      "applied_to": "each channel of the full recording, before segmentation"
+      "method": "none"
     },
     "excluded_recordings": [
       "200625A_F"

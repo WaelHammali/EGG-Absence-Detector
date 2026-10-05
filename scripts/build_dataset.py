@@ -18,6 +18,8 @@ from convert_to_excel import convert_recording
 from src.annotations import resolve_annotations
 from src.features import extract_features
 from src.io import CHANNELS, annotations_for_recording
+from src.labels import sample_labels
+from src.preprocessing import PREPROCESSING, describe, preprocess
 from src.segmentation import segment_labels, window_view
 
 
@@ -44,6 +46,7 @@ def build_feature_dataset(
     excluded: set[str],
     processed_dir: Path,
     output: Path,
+    preprocessing: str = "bandpass",
 ) -> tuple[list[dict], dict]:
     recordings = sorted(set(annotations["recording"]) - excluded)
     recording_files = [processed_dir / f"{recording}.parquet" for recording in recordings]
@@ -61,7 +64,7 @@ def build_feature_dataset(
             required = ["Time", *CHANNELS, "Class"]
             if frame.columns.tolist() != required:
                 raise ValueError(f"{recording}: unexpected columns {frame.columns.tolist()}")
-            signal = frame.loc[:, CHANNELS].to_numpy(dtype=np.float32, copy=False)
+            signal = preprocess(frame.loc[:, CHANNELS].to_numpy(dtype=np.float32, copy=False), preprocessing)
             labels = frame["Class"].to_numpy(dtype=np.uint8, copy=False)
             segmentation = segment_labels(labels)
             windows = window_view(signal, segmentation)
@@ -100,7 +103,7 @@ def build_feature_dataset(
                 }
             )
             print(
-                f"{mode}/{recording}: windows={total:,}, class1={class_1:,}, "
+                f"{mode}/{preprocessing}/{recording}: windows={total:,}, class1={class_1:,}, "
                 f"represented seizures={represented}/{seizure_count}",
                 flush=True,
             )
@@ -230,13 +233,25 @@ def write_decisions(mode: str, resolution: dict) -> None:
     (ROOT / "docs/ANNOTATION_DECISIONS.md").write_text("\n".join(lines))
 
 
-def write_report(mode: str, summary: dict) -> None:
+def write_report(mode: str, summary: dict, suffix: str) -> None:
     rows = summary["per_recording"]
     overall = summary["overall"]
+    preprocessing = summary["parameters"]["preprocessing"]
+    if preprocessing["method"] == "bandpass":
+        low, high = preprocessing["band_hz"]
+        filter_text = (
+            f"Before segmentation, each channel of the full recording is band-pass filtered {low:g}–{high:g} Hz "
+            f"(Butterworth order {preprocessing['order']}, zero-phase `sosfiltfilt`). This removes the per-recording DC offset; "
+            "`mean` features are therefore close to 0 and uninformative but kept as required by the assignment."
+        )
+    else:
+        filter_text = "No filtering is applied: features are computed on the raw signal, including each recording's DC offset."
     lines = [
-        f"# Dataset report — {mode.capitalize()} annotations",
+        f"# Dataset report — {mode.capitalize()} annotations" + (" (unfiltered)" if suffix else ""),
         "",
         "The dataset contains 2 s windows (512 samples at 256 Hz) with a 1 s hop. A window is positive when at least 256 samples are inside a seizure interval. Features use Fp1, Fp2, C3, C4, T3, T4, O1 and O2.",
+        "",
+        filter_text,
         "",
         "| Recording | Windows | Class 0 | Class 1 | Class 0 % | Class 1 % | Seizures represented / total |",
         "|---|---:|---:|---:|---:|---:|---:|",
@@ -266,34 +281,49 @@ def write_report(mode: str, summary: dict) -> None:
             )
     lines += [
         "",
-        "Features comprise per-channel and channel-average time statistics, absolute Delta/Theta/Alpha/Beta powers, and relative band powers. No model training or splitting is performed.",
+        "Features comprise per-channel and channel-average time statistics, absolute Delta/Theta/Alpha/Beta powers, and relative band powers. This report covers dataset construction only; models are documented separately.",
         "",
     ]
-    (ROOT / f"docs/DATASET_PARTS_I_VI_{mode.upper()}.md").write_text("\n".join(lines))
+    (ROOT / f"docs/DATASET_PARTS_I_VI_{mode.upper()}{suffix.upper()}.md").write_text("\n".join(lines))
 
 
 def main() -> None:
     parser = ArgumentParser()
     parser.add_argument("--annotations", choices=["official", "provisional"], required=True)
     parser.add_argument("--decisions", help="Optional path to annotation_decisions.yaml")
+    parser.add_argument("--preprocess", choices=PREPROCESSING, default="bandpass", help="Signal preprocessing before segmentation")
+    parser.add_argument(
+        "--skip-conversion",
+        action="store_true",
+        help="Reuse existing labeled Parquet files (labels are checked against the annotations)",
+    )
     args = parser.parse_args()
     mode = args.annotations
+    # The filtered dataset is the default; the unfiltered variant is kept alongside with a _raw suffix.
+    suffix = "" if args.preprocess == "bandpass" else "_raw"
     interim_dir = ROOT / f"data/interim/{mode}"
     excel_dir = EXCEL / mode
     processed_dir = PROCESSED / mode
-    output = PROCESSED / f"windows_features_{mode}.parquet"
+    output = PROCESSED / f"windows_features_{mode}{suffix}.parquet"
     resolution = resolve_annotations(ROOT, mode, interim_dir, args.decisions)
     annotations = resolution["annotations"]
     excluded = set(resolution["excluded"])
     recordings = sorted(set(annotations["recording"]) - excluded)
 
     for recording in recordings:
+        if args.skip_conversion:
+            path = processed_dir / f"{recording}.parquet"
+            labels = pd.read_parquet(path, columns=["Class"])["Class"].to_numpy()
+            expected = sample_labels(len(labels), annotations_for_recording(annotations, recording))
+            if not np.array_equal(labels, expected):
+                raise ValueError(f"{path} labels differ from current annotations; rerun without --skip-conversion")
+            continue
         convert_recording(recording, force=True, annotations=annotations, excel_dir=excel_dir, processed_dir=processed_dir)
 
-    report_rows, overall = build_feature_dataset(mode, annotations, excluded, processed_dir, output)
+    report_rows, overall = build_feature_dataset(mode, annotations, excluded, processed_dir, output, args.preprocess)
     comparison = compare_reports(report_rows, overall) if mode == "official" else None
-    report_csv = ROOT / f"outputs/window_counts_{mode}.csv"
-    report_json = ROOT / f"outputs/dataset_summary_{mode}.json"
+    report_csv = ROOT / f"outputs/window_counts_{mode}{suffix}.csv"
+    report_json = ROOT / f"outputs/dataset_summary_{mode}{suffix}.json"
     write_csv(report_csv, report_rows, overall)
     summary = {
         "annotation_mode": mode,
@@ -305,6 +335,7 @@ def main() -> None:
             "hop_samples": 256,
             "positive_rule": "at least 50% (256/512 samples) labeled seizure",
             "channels": list(CHANNELS),
+            "preprocessing": describe(args.preprocess),
             "excluded_recordings": sorted(excluded),
         },
         "per_recording": report_rows,
@@ -314,7 +345,7 @@ def main() -> None:
     }
     report_json.write_text(json.dumps(summary, indent=2) + "\n")
     write_decisions(mode, resolution)
-    write_report(mode, summary)
+    write_report(mode, summary, suffix)
     print(f"Dataset: {output}")
     print(f"Overall: {overall}")
 

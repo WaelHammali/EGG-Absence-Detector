@@ -30,11 +30,14 @@ Q10_FEATURES = [
 ]
 
 
-def dataset_path(mode: str) -> Path:
-    preferred = ROOT / f"data/processed/windows_features_{mode}.parquet"
+DC_FEATURES = [f"avg_{name}" for name in ("mean", "min", "max", "rms", "energy")]
+
+
+def dataset_path(mode: str, suffix: str = "") -> Path:
+    preferred = ROOT / f"data/processed/windows_features_{mode}{suffix}.parquet"
     if preferred.exists():
         return preferred
-    if mode == "provisional":
+    if mode == "provisional" and suffix == "_raw":
         legacy = ROOT / "data/processed/windows_features.parquet"
         if legacy.exists():
             return legacy
@@ -180,14 +183,99 @@ def heatmaps(correlation: pd.DataFrame, average_columns: list[str], output_dir: 
     plt.close(figure)
 
 
+def pair_types(pairs: pd.DataFrame) -> pd.Series:
+    """Count high-correlation pairs by (feature type, feature type, same/different channel)."""
+    def kind(row) -> str:
+        channel_1, feature_1 = row.feature_1.split("_", 1)
+        channel_2, feature_2 = row.feature_2.split("_", 1)
+        first, second = sorted([feature_1, feature_2])
+        if channel_1 == channel_2:
+            where = "même canal"
+        elif "avg" in (channel_1, channel_2):
+            where = "canal vs moyenne"
+        else:
+            where = "canaux différents"
+        return f"{first} – {second} ({where})"
+    if pairs.empty:
+        return pd.Series(dtype=int)
+    return pairs.apply(kind, axis=1).value_counts()
+
+
+def preprocessing_comparison(
+    mode: str, statistics: pd.DataFrame, spearman: pd.DataFrame, reference: dict
+) -> list[str]:
+    """Report section comparing the filtered dataset with the unfiltered reference."""
+    raw = reference["statistics"].set_index("feature")
+    new = statistics.set_index("feature")
+    lines = [
+        "## Effet du prétraitement (comparaison avec les données non filtrées)",
+        "",
+        "Le filtre passe-bande 0,5–40 Hz retire l’offset continu propre à chaque enregistrement (< 0,5 Hz) et le bruit secteur à 50 Hz, très présent dans le signal brut (pic à 50 Hz 300 à 35 000 fois au-dessus du niveau 30–45 Hz selon les enregistrements). Illustration : [avant/après filtrage](../outputs/figures/" + mode + "/preprocessing/211104B_D_seizure3_filtering.png). Le rapport non filtré complet reste disponible : [PART_VII_ANALYSIS_" + mode.upper() + "_RAW.md](PART_VII_ANALYSIS_" + mode.upper() + "_RAW.md).",
+        "",
+        "### Écart AUC globale / intra-enregistrement des variables sensibles à l’offset",
+        "",
+        "| Caractéristique | Brut : globale | Brut : intra | Brut : écart | Filtré : globale | Filtré : intra | Filtré : écart |",
+        "|---|---:|---:|---:|---:|---:|---:|",
+    ]
+    for feature in DC_FEATURES:
+        a, b = raw.loc[feature], new.loc[feature]
+        lines.append(
+            f"| {feature} | {a.separation_auc:.3f} | {a.within_recording_separation_auc:.3f} | "
+            f"{a.within_recording_separation_auc - a.separation_auc:+.3f} | {b.separation_auc:.3f} | "
+            f"{b.within_recording_separation_auc:.3f} | {b.within_recording_separation_auc - b.separation_auc:+.3f} |"
+        )
+    gaps_raw = (raw.within_recording_separation_auc - raw.separation_auc).loc[DC_FEATURES]
+    gaps_new = (new.within_recording_separation_auc - new.separation_auc).loc[DC_FEATURES]
+    lines += [
+        "",
+        f"Écart moyen sur ces cinq variables : {gaps_raw.mean():+.3f} avant filtrage, {gaps_new.mean():+.3f} après. "
+        "Après filtrage, la moyenne de chaque fenêtre est proche de 0 : `mean` n’apporte plus d’information (elle est conservée car demandée par l’énoncé), "
+        "`rms` devient presque identique à `std`, et `min`/`max` mesurent l’amplitude des oscillations au lieu de l’offset.",
+        "",
+        "### Caractéristiques les plus discriminantes avant / après filtrage (AUC globale)",
+        "",
+        "| Rang | Brut | AUC | Filtré | AUC |",
+        "|---:|---|---:|---|---:|",
+    ]
+    raw_top = reference["statistics"].head(10)
+    new_top = statistics.head(10)
+    for rank, (a, b) in enumerate(zip(raw_top.itertuples(index=False), new_top.itertuples(index=False)), 1):
+        lines.append(f"| {rank} | {a.feature} | {a.separation_auc:.3f} | {b.feature} | {b.separation_auc:.3f} |")
+    raw_groups = redundancy_groups(reference["spearman"], 0.95)
+    new_groups = redundancy_groups(spearman, 0.95)
+    raw_pairs = high_correlation_pairs(reference["spearman"], 0.95)
+    new_pairs = high_correlation_pairs(spearman, 0.95)
+    raw_keys = set(zip(raw_pairs.feature_1, raw_pairs.feature_2))
+    new_keys = set(zip(new_pairs.feature_1, new_pairs.feature_2))
+    gained = new_pairs.loc[[pair not in raw_keys for pair in zip(new_pairs.feature_1, new_pairs.feature_2)]]
+    lost = raw_pairs.loc[[pair not in new_keys for pair in zip(raw_pairs.feature_1, raw_pairs.feature_2)]]
+    lines += [
+        "",
+        "### Groupes redondants avant / après filtrage (|ρ de Spearman| ≥ 0,95)",
+        "",
+        f"Brut : {len(raw_pairs)} paires, {len(raw_groups)} groupes (tailles {', '.join(str(len(group)) for group in raw_groups)}). "
+        f"Filtré : {len(new_pairs)} paires, {len(new_groups)} groupes (tailles {', '.join(str(len(group)) for group in new_groups)}).",
+        "",
+        "| Type de paire | Apparues après filtrage | Disparues après filtrage |",
+        "|---|---:|---:|",
+    ]
+    gained_types, lost_types = pair_types(gained), pair_types(lost)
+    for kind in sorted(set(gained_types.index) | set(lost_types.index)):
+        lines.append(f"| {kind} | {int(gained_types.get(kind, 0))} | {int(lost_types.get(kind, 0))} |")
+    lines.append("")
+    return lines
+
+
 def write_report(
     mode: str,
+    suffix: str,
     frame: pd.DataFrame,
     statistics: pd.DataFrame,
     pairs: pd.DataFrame,
     pearson: pd.DataFrame,
     spearman: pd.DataFrame,
     average_columns: list[str],
+    reference: dict | None,
 ) -> None:
     selected = statistics.set_index("feature").loc[[feature for feature in Q10_FEATURES if feature in statistics["feature"].values]].reset_index()
     top = statistics.head(15)
@@ -197,11 +285,12 @@ def write_report(
     groups = redundancy_groups(spearman, 0.95)
     spearman_pairs = high_correlation_pairs(spearman, 0.95)
     within_top = statistics.sort_values("within_recording_separation_auc", ascending=False).head(10)
-    dc_features = [f"avg_{name}" for name in ("mean", "min", "max", "rms", "energy")]
-    dc = statistics.set_index("feature").loc[dc_features]
-    figure_base = "../outputs/figures/" + mode + "/part_vii/"
+    dc = statistics.set_index("feature").loc[DC_FEATURES]
+    variant = mode + suffix
+    figure_base = "../outputs/figures/" + variant + "/part_vii/"
+    preprocessing = "signal non filtré" if suffix else "signal filtré passe-bande 0,5–40 Hz"
     lines = [
-        f"# Partie VII — Analyse exploratoire ({mode})",
+        f"# Partie VII — Analyse exploratoire ({mode}, {preprocessing})",
         "",
         f"Analyse de {len(frame):,} fenêtres : {(frame['class'] == 0).sum():,} de classe 0 et {(frame['class'] == 1).sum():,} de classe 1. Aucun modèle n’est entraîné dans cette partie.",
         "",
@@ -242,20 +331,28 @@ def write_report(
     ]
     for rank, row in enumerate(within_top.itertuples(index=False), 1):
         lines.append(f"| {rank} | {row.feature} | {row.within_recording_separation_auc:.3f} | {row.separation_auc:.3f} |")
+    if suffix:
+        lines += [
+            "",
+            "### Avertissement : composante continue (offset DC)",
+            "",
+            "Plusieurs enregistrements ont une moyenne de signal très éloignée de zéro (médiane par enregistrement de `avg_mean` entre environ −830 et +1000), ce qui indique un signal non filtré passe-haut. `mean`, `min`, `max`, `rms` et `energy` sont calculés sans retrait de la moyenne : leur niveau dépend donc de cet offset propre à chaque enregistrement. À l’intérieur d’un enregistrement (offset constant), `min` et `max` suivent encore l’amplitude des pointes-ondes, mais entre enregistrements l’offset domine, d’où l’écart entre AUC globale et AUC intra-enregistrement :",
+            "",
+            "| Caractéristique | AUC globale | AUC intra-enregistrement |",
+            "|---|---:|---:|",
+        ]
+        for feature, row in dc.iterrows():
+            lines.append(f"| {feature} | {row.separation_auc:.3f} | {row.within_recording_separation_auc:.3f} |")
+        lines += [
+            "",
+            "Un modèle évalué sur des enregistrements non vus risque d’utiliser ces variables pour reconnaître l’enregistrement plutôt que la crise. `std`, `variance`, `amplitude` (crête à crête) et les puissances spectrales (calculées après retrait de la moyenne) ne sont pas affectées. Ce constat motive le filtrage passe-bande du jeu de données principal.",
+        ]
+    else:
+        lines += [
+            "",
+            "`mean` est quasi nulle après filtrage : son AUC reflète du bruit résiduel, pas une information utile. Elle est conservée car demandée par l’énoncé. L’effet du filtre sur les variables sensibles à l’offset est détaillé dans la dernière section.",
+        ]
     lines += [
-        "",
-        "### Avertissement : composante continue (offset DC)",
-        "",
-        "Plusieurs enregistrements ont une moyenne de signal très éloignée de zéro (médiane par enregistrement de `avg_mean` entre environ −830 et +1000), ce qui indique un signal non filtré passe-haut. `mean`, `min`, `max`, `rms` et `energy` sont calculés sans retrait de la moyenne : leur niveau dépend donc de cet offset propre à chaque enregistrement. À l’intérieur d’un enregistrement (offset constant), `min` et `max` suivent encore l’amplitude des pointes-ondes, mais entre enregistrements l’offset domine, d’où l’écart entre AUC globale et AUC intra-enregistrement :",
-        "",
-        "| Caractéristique | AUC globale | AUC intra-enregistrement |",
-        "|---|---:|---:|",
-    ]
-    for feature, row in dc.iterrows():
-        lines.append(f"| {feature} | {row.separation_auc:.3f} | {row.within_recording_separation_auc:.3f} |")
-    lines += [
-        "",
-        "Un modèle évalué sur des enregistrements non vus risque d’utiliser ces variables pour reconnaître l’enregistrement plutôt que la crise. `std`, `variance`, `amplitude` (crête à crête) et les puissances spectrales (calculées après retrait de la moyenne) ne sont pas affectées. À décider avant les modèles : retirer ces variables ou retirer la moyenne de chaque fenêtre.",
         "",
         "Ces résultats mesurent chaque variable séparément et ne constituent pas encore un modèle prédictif.",
         "",
@@ -295,23 +392,28 @@ def write_report(
         lines.append(f"{index}. ({len(group)}) {', '.join(f'`{name}`' for name in group)} — représentant suggéré : `{best}` (meilleure AUC intra-enregistrement {auc[best]:.3f}).")
     lines += [
         "",
-        f"Figures : corrélations moyennes [Spearman]({figure_base}correlation_average_features_spearman.png) et [Pearson]({figure_base}correlation_average_features.png); matrice complète [Spearman]({figure_base}correlation_all_features_spearman.png) et [Pearson]({figure_base}correlation_all_features.png). Tableaux : `outputs/feature_class_comparison_{mode}.csv`, `outputs/high_correlations_{mode}.csv` (Pearson), `outputs/high_correlations_spearman_{mode}.csv`, `outputs/feature_correlations_{mode}.csv` et `outputs/feature_correlations_spearman_{mode}.csv`.",
+        f"Figures : corrélations moyennes [Spearman]({figure_base}correlation_average_features_spearman.png) et [Pearson]({figure_base}correlation_average_features.png); matrice complète [Spearman]({figure_base}correlation_all_features_spearman.png) et [Pearson]({figure_base}correlation_all_features.png). Tableaux : `outputs/feature_class_comparison_{variant}.csv`, `outputs/high_correlations_{variant}.csv` (Pearson), `outputs/high_correlations_spearman_{variant}.csv`, `outputs/feature_correlations_{variant}.csv` et `outputs/feature_correlations_spearman_{variant}.csv`.",
         "",
     ]
-    (ROOT / f"docs/PART_VII_ANALYSIS_{mode.upper()}.md").write_text("\n".join(lines))
+    if reference is not None:
+        lines += preprocessing_comparison(mode, statistics, spearman, reference)
+    (ROOT / f"docs/PART_VII_ANALYSIS_{variant.upper()}.md").write_text("\n".join(lines))
 
 
 def main() -> None:
     parser = ArgumentParser()
     parser.add_argument("--annotations", choices=["official", "provisional"], required=True)
+    parser.add_argument("--preprocess", choices=["bandpass", "none"], default="bandpass")
     args = parser.parse_args()
     mode = args.annotations
-    path = dataset_path(mode)
+    suffix = "" if args.preprocess == "bandpass" else "_raw"
+    variant = mode + suffix
+    path = dataset_path(mode, suffix)
     frame = pd.read_parquet(path)
     feature_columns = [column for column in frame.columns if column not in METADATA]
     if frame[feature_columns].isna().any().any():
         raise ValueError("Feature dataset contains missing values")
-    output_dir = ROOT / f"outputs/figures/{mode}/part_vii"
+    output_dir = ROOT / f"outputs/figures/{variant}/part_vii"
     output_dir.mkdir(parents=True, exist_ok=True)
 
     statistics = class_statistics(frame, feature_columns)
@@ -320,16 +422,26 @@ def main() -> None:
     average_columns = [column for column in feature_columns if column.startswith("avg_")]
     pairs = high_correlation_pairs(correlation)
 
-    statistics.to_csv(ROOT / f"outputs/feature_class_comparison_{mode}.csv", index=False)
-    pairs.to_csv(ROOT / f"outputs/high_correlations_{mode}.csv", index=False)
-    high_correlation_pairs(spearman).to_csv(ROOT / f"outputs/high_correlations_spearman_{mode}.csv", index=False)
-    correlation.to_csv(ROOT / f"outputs/feature_correlations_{mode}.csv")
-    spearman.to_csv(ROOT / f"outputs/feature_correlations_spearman_{mode}.csv")
+    statistics.to_csv(ROOT / f"outputs/feature_class_comparison_{variant}.csv", index=False)
+    pairs.to_csv(ROOT / f"outputs/high_correlations_{variant}.csv", index=False)
+    high_correlation_pairs(spearman).to_csv(ROOT / f"outputs/high_correlations_spearman_{variant}.csv", index=False)
+    correlation.to_csv(ROOT / f"outputs/feature_correlations_{variant}.csv")
+    spearman.to_csv(ROOT / f"outputs/feature_correlations_spearman_{variant}.csv")
     boxplots(frame, output_dir / "class_comparisons.png")
     heatmaps(correlation, average_columns, output_dir, "pearson")
     heatmaps(spearman, average_columns, output_dir, "spearman")
-    write_report(mode, frame, statistics, pairs, correlation, spearman, average_columns)
-    print(f"Part VII report: {ROOT / f'docs/PART_VII_ANALYSIS_{mode.upper()}.md'}")
+    reference = None
+    raw_statistics = ROOT / f"outputs/feature_class_comparison_{mode}_raw.csv"
+    raw_spearman = ROOT / f"outputs/feature_correlations_spearman_{mode}_raw.csv"
+    if not suffix and raw_statistics.exists() and raw_spearman.exists():
+        reference = {
+            "statistics": pd.read_csv(raw_statistics),
+            "spearman": pd.read_csv(raw_spearman, index_col=0),
+        }
+    elif not suffix:
+        print("Unfiltered reference not found; run with --preprocess none first for the comparison section.")
+    write_report(mode, suffix, frame, statistics, pairs, correlation, spearman, average_columns, reference)
+    print(f"Part VII report: {ROOT / f'docs/PART_VII_ANALYSIS_{variant.upper()}.md'}")
     columns = ["feature", "separation_auc", "within_recording_separation_auc", "cohens_d"]
     print(f"Top discriminants:\n{statistics.head(10)[columns].to_string(index=False)}")
     print(f"Highly correlated pairs |r|>=0.95: {len(pairs)}")

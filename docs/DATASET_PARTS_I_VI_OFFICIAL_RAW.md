@@ -1,8 +1,8 @@
-# Dataset report — Official annotations
+# Dataset report — Official annotations (unfiltered)
 
 The dataset contains 2 s windows (512 samples at 256 Hz) with a 1 s hop. A window is positive when at least 256 samples are inside a seizure interval. Features use Fp1, Fp2, C3, C4, T3, T4, O1 and O2.
 
-Before segmentation, each channel of the full recording is band-pass filtered 0.5–40 Hz (Butterworth order 4, zero-phase `sosfiltfilt`). This removes the per-recording DC offset; `mean` features are therefore close to 0 and uninformative but kept as required by the assignment.
+No filtering is applied: features are computed on the raw signal, including each recording's DC offset.
 
 | Recording | Windows | Class 0 | Class 1 | Class 0 % | Class 1 % | Seizures represented / total |
 |---|---:|---:|---:|---:|---:|---:|
