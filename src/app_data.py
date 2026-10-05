@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-import json
 
 import numpy as np
 import pandas as pd
@@ -17,7 +16,8 @@ from src.io import CHANNELS, FS
 ROOT = Path(__file__).resolve().parents[1]
 APP_DATA = ROOT / "data/processed/app"
 REQUIRED = {
-    "outputs/predictions_oof.parquet": "python scripts/predict_oof.py",
+    "outputs/predictions_oof_models.parquet": "python scripts/predict_oof.py",
+    "outputs/model_comparison.csv": "python scripts/predict_oof.py",
     "data/processed/app/recording_metadata.csv": "python scripts/prepare_app_data.py",
     "data/processed/app/technician_events.csv": "python scripts/prepare_app_data.py",
     "data/interim/official/annotations_clean.csv": "python scripts/build_dataset.py --annotations official",
@@ -28,17 +28,28 @@ class MissingData(Exception):
     """Raised with a user-facing message when a precomputed file is absent."""
 
 
+DEFAULT_MODEL = "Random Forest"
+
+
 @dataclass(frozen=True)
 class AppData:
-    predictions: pd.DataFrame
+    predictions: dict[str, pd.DataFrame]  # model name -> out-of-fold window probabilities
+    comparison: pd.DataFrame  # one row per model: best threshold and overall scores
     annotations: pd.DataFrame
     metadata: pd.DataFrame
     events: pd.DataFrame
-    default_threshold: float
 
     @property
     def recordings(self) -> list[str]:
         return self.metadata["recording"].tolist()
+
+    @property
+    def models(self) -> list[str]:
+        return self.comparison["model"].tolist()
+
+    def best_threshold(self, model: str) -> float:
+        """Threshold maximizing event-level F1 for this model on out-of-fold predictions."""
+        return float(self.comparison.set_index("model").loc[model, "threshold"])
 
     def info(self, recording: str) -> pd.Series:
         return self.metadata.set_index("recording").loc[recording]
@@ -47,21 +58,32 @@ class AppData:
         frame = self.annotations.loc[self.annotations["recording"] == recording, ["start_s", "end_s"]]
         return frame.sort_values("start_s").reset_index(drop=True)
 
-    def windows(self, recording: str) -> pd.DataFrame:
-        return self.predictions.loc[self.predictions["recording"] == recording]
+    def windows(self, recording: str, model: str = DEFAULT_MODEL) -> pd.DataFrame:
+        frame = self.predictions[model]
+        return frame.loc[frame["recording"] == recording]
 
     def technician(self, recording: str) -> pd.DataFrame:
         return self.events.loc[self.events["recording"] == recording]
 
-    def detect(self, recording: str, threshold: float) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
-        """Detected intervals, event matches and event metrics for one recording."""
-        group = self.windows(recording)
+    def detect(self, recording: str, threshold: float, model: str = DEFAULT_MODEL) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
+        """Detected intervals, event matches and metrics for one recording and one model."""
+        group = self.windows(recording, model)
         detected = windows_to_intervals(group["start_s"], group["end_s"], group["proba"], threshold)
         matches = match_events(detected, self.real(recording))
-        return detected, matches, event_metrics(matches, len(detected))
+        metrics = event_metrics(matches, len(detected))
+        metrics["detections"] = len(detected)
+        predicted = group["proba"].to_numpy() >= threshold
+        truth = group["true_class"].to_numpy() == 1
+        tp, fp, fn = int((predicted & truth).sum()), int((predicted & ~truth).sum()), int((~predicted & truth).sum())
+        metrics["window"] = {
+            "tp": tp, "fp": fp, "fn": fn, "tn": int((~predicted & ~truth).sum()),
+            "precision": tp / (tp + fp) if tp + fp else float("nan"),
+            "recall": tp / (tp + fn) if tp + fn else float("nan"),
+        }
+        return detected, matches, metrics
 
-    def detect_everything(self, threshold: float) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
-        detected, matches = detect_all(self.predictions, self.annotations, threshold)
+    def detect_everything(self, threshold: float, model: str = DEFAULT_MODEL) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
+        detected, matches = detect_all(self.predictions[model], self.annotations, threshold)
         metrics = event_metrics(matches, len(detected))
         metrics["detections"] = len(detected)
         metrics["false_alarms_per_hour"] = metrics["fp"] / (self.metadata["duration_s"].sum() / 3600)
@@ -76,13 +98,13 @@ def load() -> AppData:
             "Some precomputed files are missing: " + ", ".join(path for path, _ in missing)
             + ". Run: " + " ; ".join(steps)
         )
-    predictions = pd.read_parquet(ROOT / "outputs/predictions_oof.parquet")
+    table = pd.read_parquet(ROOT / "outputs/predictions_oof_models.parquet")
+    predictions = {model: group.drop(columns="model").reset_index(drop=True) for model, group in table.groupby("model", sort=False)}
+    comparison = pd.read_csv(ROOT / "outputs/model_comparison.csv")
     annotations = pd.read_csv(ROOT / "data/interim/official/annotations_clean.csv")
     metadata = pd.read_csv(APP_DATA / "recording_metadata.csv").fillna({"absence_type": ""})
     events = pd.read_csv(APP_DATA / "technician_events.csv")
-    summary = ROOT / "outputs/detection_summary.json"
-    threshold = float(json.loads(summary.read_text())["threshold"]) if summary.exists() else 0.5
-    return AppData(predictions, annotations, metadata, events, threshold)
+    return AppData(predictions, comparison, annotations, metadata, events)
 
 
 @lru_cache(maxsize=4)

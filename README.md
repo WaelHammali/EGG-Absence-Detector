@@ -65,7 +65,7 @@ python scripts/train_models.py                                               # d
 Temporal detection (Parts X–XI): out-of-fold probabilities, the final model, intervals and error analysis:
 
 ```bash
-python scripts/predict_oof.py          # outputs/predictions_oof.parquet + models/rf_final.joblib
+python scripts/predict_oof.py          # out-of-fold predictions (RF + all four models), model_comparison.csv, models/rf_final.joblib
 python scripts/prepare_app_data.py     # filtered signals, recording metadata, technician events (data/processed/app/)
 python scripts/evaluate_detection.py   # threshold, outputs/detected_intervals.csv, figures, docs/PARTS_X_XI.md
 python scripts/detect.py --recording 190304A_E [--threshold 0.5]
@@ -82,10 +82,13 @@ python app.py
 
 Open <http://127.0.0.1:8050>. Nothing is trained at startup. If a precomputed file is missing, the app shows which command to run instead of failing.
 
-- **Overview**: event-level metrics and a timeline of every recording (real seizures above, detections below). Click a row to open the recording.
-- **Recording**: stacked or overlaid EEG with full-resolution zoom, seizure probability with the threshold line, technician events, the spectrum of any clicked 2 s window, and the table of real vs detected intervals.
-- Controls: probability threshold (updates detections and metrics live), page length, gain, channel selection, page buttons or the ← → keys, jump to previous/next seizure, "Save view as PNG" and "Download intervals CSV".
-- The sun/moon button switches between the dark and light themes; `?theme=light&page=recording&recording=211104B_D` in the URL opens a given state directly.
+The app has three parts, chosen in the header, and one patient selector in the sidebar:
+
+- **Visualisation**: the data only. Choose the patient and which channels to show (remove a channel with its ×, "Show all" brings the eight back; stacked or overlaid). Each curve turns green during a real seizure, a diamond marks each seizure start, and the bottom curve is 1 during a seizure and 0 otherwise. A table lists the real seizures.
+- **Prediction**: choose one of the four trained models (Decision Tree, Random Forest, KNN, SVM) and see its probability, its detections against the real seizures, a verdict for this patient (found, missed, false alarms) and the table of real vs predicted intervals. The threshold slider updates everything live; each model starts at its own best threshold.
+- **Comparison**: the four models side by side (overall scores and the result on the selected patient), then the metrics and the all-patient timeline of the selected model. Click a timeline row to open that patient in Prediction.
+- Common controls: page length, gain, page buttons or the ← → keys, jump to previous/next seizure, technician notes, the spectrum of any clicked 2 s window, "Save view as PNG" and "Download intervals CSV".
+- The sun/moon button switches between the dark and light themes; `?theme=light&page=prediction&recording=211104B_D` in the URL opens a given state directly.
 
 All probabilities shown are out-of-fold: each recording is scored by a model that never saw it. Fonts (Google Fonts) and icons (Iconify) are loaded from the internet; offline, the app falls back to system fonts and icons are not drawn. Screenshots in `outputs/figures/app/` are produced by `python scripts/screenshot_app.py`.
 

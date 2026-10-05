@@ -1,4 +1,4 @@
-"""Take screenshots of both app pages in dark and light mode (outputs/figures/app/).
+"""Take screenshots of the three app parts in dark and light mode (outputs/figures/app/).
 
 Starts app.py on a free port, drives it with headless Chromium, then stops it.
 Requires `pip install selenium` and a system chromium + chromedriver.
@@ -82,23 +82,24 @@ def main() -> None:
                 time.sleep(0.5)
         for theme in ("dark", "light"):
             driver.set_window_size(args.width, 900)
-            driver.get(f"{base}/?theme={theme}")
+            driver.get(f"{base}/?theme={theme}&page=comparison&recording={args.recording}")
             wait_for_plots(driver, "#timeline")
-            capture(driver, OUTPUT / f"overview_{theme}{args.suffix}.png", args.width)
+            capture(driver, OUTPUT / f"comparison_{theme}{args.suffix}.png", args.width)
 
-            driver.set_window_size(args.width, 900)
-            driver.get(f"{base}/?theme={theme}&page=recording&recording={args.recording}")
-            wait_for_plots(driver, "#eeg")
-            driver.find_element(By.ID, "next-seizure").click()
-            time.sleep(2.0)
-            # Click a trace inside the seizure to fill the spectrum card.
-            plot = driver.find_element(By.CSS_SELECTOR, "#eeg .js-plotly-plot")
-            driver.execute_script("arguments[0].scrollIntoView({block: 'start'});", plot)
-            size = plot.size
-            ActionChains(driver).move_to_element_with_offset(plot, 0, int(-size["height"] * 0.18)).pause(0.4).click().perform()
-            time.sleep(2.0)
-            driver.execute_script("window.scrollTo(0, 0);")
-            capture(driver, OUTPUT / f"recording_{theme}{args.suffix}.png", args.width)
+            for page in ("visualisation", "prediction"):
+                driver.set_window_size(args.width, 900)
+                driver.get(f"{base}/?theme={theme}&page={page}&recording={args.recording}")
+                wait_for_plots(driver, "#eeg")
+                driver.find_element(By.ID, "next-seizure").click()
+                time.sleep(2.0)
+                # Click a trace inside the seizure to fill the spectrum card.
+                plot = driver.find_element(By.CSS_SELECTOR, "#eeg .js-plotly-plot")
+                driver.execute_script("arguments[0].scrollIntoView({block: 'start'});", plot)
+                size = plot.size
+                ActionChains(driver).move_to_element_with_offset(plot, 0, int(-size["height"] * 0.18)).pause(0.4).click().perform()
+                time.sleep(2.0)
+                driver.execute_script("window.scrollTo(0, 0);")
+                capture(driver, OUTPUT / f"{page}_{theme}{args.suffix}.png", args.width)
         for entry in driver.get_log("browser"):
             if entry["level"] == "SEVERE":
                 problems.append(entry["message"])

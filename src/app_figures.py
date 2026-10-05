@@ -92,8 +92,12 @@ def legend_key(name: str, color: str, symbol: str = "square", dash: str | None =
     return go.Scatter(x=[None], y=[None], mode="markers", name=name, marker={"color": color, "size": 11, "symbol": symbol}, hoverinfo="skip", **axes)
 
 
-def event_shapes(real: pd.DataFrame, detected: pd.DataFrame, threshold: float, probability_axis: str, theme: str) -> list[dict]:
-    """Seizure shading, detection shading and the threshold line."""
+def event_shapes(
+    real: pd.DataFrame, detected: pd.DataFrame | None, threshold: float | None, probability_axis: str, theme: str
+) -> list[dict]:
+    """Seizure shading, plus detection shading and the threshold line when a model is shown."""
+    if detected is None:
+        detected = pd.DataFrame(columns=["start_s", "end_s"])
     labels = len(real) + len(detected) <= 40
     tokens = THEMES[theme]
     shapes = []
@@ -113,31 +117,44 @@ def event_shapes(real: pd.DataFrame, detected: pd.DataFrame, threshold: float, p
         if labels:
             shape["label"] = {"text": f"Detected {number}", "textposition": "bottom left", "font": {"size": 10, "color": tokens["text"]}, "padding": 3}
         shapes.append(shape)
-    shapes.append(
-        {
-            "type": "line", "xref": "x2 domain", "yref": probability_axis, "x0": 0, "x1": 1, "y0": threshold, "y1": threshold,
-            "line": {"color": THRESHOLD, "width": 1.6, "dash": "dash"},
-            "label": {"text": f"Threshold {threshold:.2f}", "textposition": "end", "yanchor": "bottom", "font": {"size": 10, "color": tokens["text"]}},
-        }
-    )
+    if threshold is not None:
+        shapes.append(
+            {
+                "type": "line", "xref": "x2 domain", "yref": probability_axis, "x0": 0, "x1": 1, "y0": threshold, "y1": threshold,
+                "line": {"color": THRESHOLD, "width": 1.6, "dash": "dash"},
+                "label": {"text": f"Threshold {threshold:.2f}", "textposition": "end", "yanchor": "bottom", "font": {"size": 10, "color": tokens["text"]}},
+            }
+        )
     return shapes
+
+
+def label_curve(real: pd.DataFrame, duration: float) -> tuple[list[float], list[float]]:
+    """0/1 step curve of the annotations: it rises to 1 for the duration of each real seizure."""
+    x, y = [0.0], [0.0]
+    for row in real.itertuples(index=False):
+        x += [row.start_s, row.start_s, row.end_s, row.end_s]
+        y += [0.0, 1.0, 1.0, 0.0]
+    return x + [duration], y + [0.0]
 
 
 def recording_figure(
     time: np.ndarray,
     signals: dict[str, np.ndarray],
-    windows: pd.DataFrame,
+    windows: pd.DataFrame | None,
     real: pd.DataFrame,
-    detected: pd.DataFrame,
+    detected: pd.DataFrame | None,
     events: pd.DataFrame | None,
-    threshold: float,
+    threshold: float | None,
     stacked: bool,
     full_scale: float,
     gain: float,
     view: tuple[float, float],
     theme: str,
 ) -> tuple[FigureResampler, dict]:
-    """EEG rows + probability row sharing the time axis.
+    """EEG rows + a bottom row sharing the time axis.
+
+    Without ``windows`` (visualisation) the bottom row is the real seizure curve only. With
+    ``windows`` (prediction) it also shows the model probability, the threshold and detections.
 
     Returns the resampler (it keeps the full-resolution data server-side) and a small
     description of the axes used by callbacks.
@@ -145,13 +162,17 @@ def recording_figure(
     tokens = THEMES[theme]
     channels = list(signals)
     rows = channels if stacked else ["EEG"]
+    prediction = windows is not None
     has_events = events is not None and len(events) > 0
+    has_strip = has_events or len(real) > 0
+    duration = float(time[-1])
     probability_height, event_height = 140, 34
     eeg_height = (78 * len(rows) if stacked else 360)
     eeg_height = max(eeg_height, 200)
     gap = 26
-    plot_height = eeg_height + probability_height + gap + (event_height + 6 if has_events else 0)
-    margin = {"l": 64, "r": 24, "t": 38, "b": 36}
+    plot_height = eeg_height + probability_height + gap + (event_height + 6 if has_strip else 0)
+    # The top margin holds the toolbar and, below it, up to two legend rows.
+    margin = {"l": 64, "r": 24, "t": 76, "b": 36}
     height = plot_height + margin["t"] + margin["b"]
 
     def fraction(pixels: float) -> float:
@@ -164,10 +185,10 @@ def recording_figure(
     layout: dict = {}
     # Axis 1 is reserved for the technician-event strip, 2.. for EEG rows, the last for probability.
     top = 1.0
-    if has_events:
+    if has_strip:
         layout["yaxis"] = axis_style(
             theme, domain=[top - fraction(event_height), top], range=[-1, 1], showgrid=False, zeroline=False,
-            tickvals=[0], ticktext=["Events"], fixedrange=True, anchor="x",
+            tickvals=[0], ticktext=["Marks"], fixedrange=True, anchor="x",
         )
         top -= fraction(event_height + 6)
     row_height = fraction(eeg_height) / len(rows)
@@ -191,7 +212,11 @@ def recording_figure(
     probability_ref = f"y{probability_number}"
     layout[probability_key] = axis_style(
         theme, domain=[0, fraction(probability_height)], range=[0, 1.05], fixedrange=True, anchor="x2",
-        tickvals=[0, 0.5, 1], title={"text": "Seizure<br>probability", "font": {"size": 11, "color": tokens["muted"]}},
+        **(
+            {"tickvals": [0, 0.5, 1], "title": {"text": "Seizure<br>probability", "font": {"size": 11, "color": tokens["muted"]}}}
+            if prediction else
+            {"tickvals": [0, 1], "ticktext": ["no", "yes"], "title": {"text": "Seizure<br>(real)", "font": {"size": 11, "color": tokens["muted"]}}}
+        ),
     )
     spikes = {"showspikes": True, "spikemode": "across", "spikesnap": "cursor", "spikethickness": 1, "spikedash": "dot", "spikecolor": tokens["muted"]}
     layout["xaxis"] = axis_style(
@@ -200,18 +225,32 @@ def recording_figure(
     layout["xaxis2"] = axis_style(
         theme, range=list(view), anchor=probability_ref, ticksuffix=" s", showgrid=True, **spikes,
         title={"text": "Time since recording start", "font": {"size": 12, "color": tokens["muted"]}},
-        rangeslider={"visible": True, "thickness": 0.07, "range": [0.0, float(time[-1])], "autorange": False, "bgcolor": tokens["track"], "bordercolor": tokens["axis"], "borderwidth": 1},
+        rangeslider={"visible": True, "thickness": 0.07, "range": [0.0, duration], "autorange": False, "bgcolor": tokens["track"], "bordercolor": tokens["axis"], "borderwidth": 1},
     )
 
     if has_events:
         figure.add_trace(
             go.Scatter(
-                x=events["time_s"], y=np.zeros(len(events)), mode="markers", name="Technician event", xaxis="x", yaxis="y",
+                x=events["time_s"], y=np.zeros(len(events)), mode="markers", name="Technician note", xaxis="x", yaxis="y",
                 marker={"color": EVENT, "symbol": "triangle-down", "size": 10, "line": {"color": tokens["panel"], "width": 1}},
                 customdata=np.stack([events["label"], events["category"]], axis=1),
                 hovertemplate="<b>%{customdata[1]}</b><br>%{customdata[0]}<br>%{x:.0f} s<extra></extra>",
             )
         )
+    if len(real):
+        # A flag at the start of every real seizure.
+        figure.add_trace(
+            go.Scatter(
+                x=real["start_s"], y=np.zeros(len(real)), mode="markers", name="Seizure start", xaxis="x", yaxis="y",
+                marker={"color": REAL, "symbol": "diamond", "size": 11, "line": {"color": tokens["panel"], "width": 1}},
+                customdata=np.stack([np.arange(1, len(real) + 1), real["start_s"], real["end_s"]], axis=1),
+                hovertemplate="<b>Seizure %{customdata[0]}</b><br>%{customdata[1]:.1f} s → %{customdata[2]:.1f} s<extra></extra>",
+            )
+        )
+    # Samples inside a real seizure, to redraw those parts of each curve in the seizure color.
+    inside = np.zeros(len(time), dtype=bool)
+    for row in real.itertuples(index=False):
+        inside[np.searchsorted(time, row.start_s) : np.searchsorted(time, row.end_s)] = True
     curve_channels: dict[int, str] = {}
     for index, channel in enumerate(channels):
         axis = f"y{(index if stacked else 0) + 2}"
@@ -224,25 +263,42 @@ def recording_figure(
             hf_x=time, hf_y=signals[channel],
         )
         curve_channels[len(figure.data) - 1] = channel
-    centers = ((windows["start_s"] + windows["end_s"]) / 2).to_numpy()
+        if inside.any():
+            # The resampler breaks the line at the gaps between seizures.
+            figure.add_trace(
+                go.Scatter(
+                    name="Seizure on the curve", mode="lines", xaxis="x", yaxis=axis, legendgroup="seizure-curve",
+                    showlegend=index == 0, line={"color": REAL, "width": 1.6}, hoverinfo="skip",
+                ),
+                hf_x=time[inside], hf_y=signals[channel][inside],
+            )
+    label_x, label_y = label_curve(real, duration)
     figure.add_trace(
         go.Scatter(
-            x=centers, y=windows["proba"].to_numpy(), mode="lines", name="Seizure probability", xaxis="x2", yaxis=probability_ref,
-            line={"color": tokens["probability"], "width": 1.3, "shape": "hvh"}, fill="tozeroy", fillcolor=rgba("#94A3B8", 0.18),
-            hovertemplate="window center %{x:.1f} s<br>p = %{y:.2f}<extra></extra>",
+            x=label_x, y=label_y, mode="lines", name="Real seizure", xaxis="x2", yaxis=probability_ref,
+            line={"color": REAL, "width": 1.6 if prediction else 2}, fill="tozeroy", fillcolor=rgba(REAL, 0.10 if prediction else 0.25),
+            hovertemplate="%{x:.1f} s<br>real seizure: %{y:.0f}<extra></extra>",
         )
     )
-    keys = {"xaxis": "x2", "yaxis": probability_ref}
-    figure.add_trace(legend_key("Real seizure (annotation)", REAL, **keys))
-    figure.add_trace(legend_key("Detection", DETECTED, **keys))
-    figure.add_trace(legend_key("Threshold", THRESHOLD, dash="dash", **keys))
+    if prediction:
+        centers = ((windows["start_s"] + windows["end_s"]) / 2).to_numpy()
+        figure.add_trace(
+            go.Scatter(
+                x=centers, y=windows["proba"].to_numpy(), mode="lines", name="Model probability", xaxis="x2", yaxis=probability_ref,
+                line={"color": tokens["probability"], "width": 1.3, "shape": "hvh"}, fill="tozeroy", fillcolor=rgba("#94A3B8", 0.18),
+                hovertemplate="window center %{x:.1f} s<br>p = %{y:.2f}<extra></extra>",
+            )
+        )
+        keys = {"xaxis": "x2", "yaxis": probability_ref}
+        figure.add_trace(legend_key("Detection", DETECTED, **keys))
+        figure.add_trace(legend_key("Threshold", THRESHOLD, dash="dash", **keys))
     figure.update_layout(
         **base_layout(theme), **layout, height=height, margin=margin, hovermode="closest", dragmode="zoom",
         shapes=event_shapes(real, detected, threshold, probability_ref, theme), uirevision="eeg",
     )
     description = {
         "probability_ref": probability_ref, "curve_channels": curve_channels, "height": height,
-        "eeg_axes": eeg_axes, "full_scale": full_scale,
+        "eeg_axes": eeg_axes, "full_scale": full_scale, "prediction": prediction,
     }
     return figure, description
 

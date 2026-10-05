@@ -35,6 +35,11 @@ except app_data.MissingData as error:
     DATA, LOAD_ERROR = None, str(error)
 
 GREEK = {"Delta": "δ", "Theta": "θ", "Alpha": "α", "Beta": "β"}
+# URL values for ?page=…, including the names used before the app was split in three parts.
+PAGES = {
+    "visualisation": "visualisation", "prediction": "prediction", "comparison": "comparison",
+    "recording": "prediction", "overview": "comparison",
+}
 PAGE_LENGTHS = [("10 s", "10"), ("30 s", "30"), ("60 s", "60"), ("Full", "full")]
 # Server-side full-resolution figures, one per browser session.
 FIGURES: OrderedDict[str, object] = OrderedDict()
@@ -151,7 +156,7 @@ def header():
                         dmc.Stack(
                             [
                                 dmc.Text("EEG Absence Detector", fw=700, size="lg", lh=1.1),
-                                dmc.Text("Out-of-fold seizure detection review", size="xs", c="dimmed", visibleFrom="md"),
+                                dmc.Text("Visualise the EEG, test a model on a patient, compare models", size="xs", c="dimmed", visibleFrom="md"),
                             ],
                             gap=0,
                         ),
@@ -161,10 +166,14 @@ def header():
                 dmc.Group(
                     [
                         tip(
-                            "Switch between the overview of all recordings and the detailed view of one recording.",
+                            "Visualisation shows the data and the real seizures; Prediction adds a model's detections; Comparison puts the models side by side.",
                             dmc.SegmentedControl(
-                                id="page", value="overview", radius="md",
-                                data=[{"value": "overview", "label": "Overview"}, {"value": "recording", "label": "Recording"}],
+                                id="page", value="visualisation", radius="md",
+                                data=[
+                                    {"value": "visualisation", "label": "Visualisation"},
+                                    {"value": "prediction", "label": "Prediction"},
+                                    {"value": "comparison", "label": "Comparison"},
+                                ],
                             ),
                         ),
                         tip(
@@ -189,51 +198,70 @@ def sidebar():
         dmc.ScrollArea(
             dmc.Stack(
                 [
-                    section("Detection"),
-                    dmc.Stack(
-                        [
-                            dmc.Group(
-                                [
-                                    dmc.Text("Probability threshold", size="sm", fw=500),
-                                    dmc.Group(
-                                        [
-                                            dmc.Text(id="threshold-value", className="mono", size="sm", c="violet"),
-                                            tip(
-                                                "Reset the threshold to the value that maximizes event-level F1 on out-of-fold predictions.",
-                                                dmc.ActionIcon(icon("tabler:restore", 16), id="threshold-reset", variant="subtle", color="gray", size="sm", **{"aria-label": "Reset threshold"}),
-                                            ),
-                                        ],
-                                        gap=4,
-                                    ),
-                                ],
-                                justify="space-between",
-                            ),
-                            wide_tip(
-                                "A window counts as seizure when its probability reaches this value; detections and metrics update live.",                                html.Div(
-                                    dmc.Slider(
-                                        id="threshold", min=0.05, max=0.95, step=0.01, value=DATA.default_threshold, color="violet",
-                                        updatemode="mouseup", precision=2,
-                                        marks=[{"value": 0.25, "label": "0.25"}, {"value": 0.5, "label": "0.50"}, {"value": 0.75, "label": "0.75"}],
-                                    ),
-                                    style={"paddingBottom": 18},
-                                ),
-                            ),
-                        ],
-                        gap=6,
+                    section("Patient"),
+                    wide_tip(
+                        "Choose the patient (recording) to look at; the label shows sex and age.",
+                        html.Div(
+                            dmc.Select(
+                                id="recording", data=recordings, value=recordings[0]["value"], searchable=True, allowDeselect=False,
+                                leftSection=icon("tabler:user", 16), comboboxProps={"withinPortal": True},
+                            )
+                        ),
                     ),
                     html.Div(
                         dmc.Stack(
                             [
                                 dmc.Divider(),
-                                section("Recording"),
+                                section("Prediction"),
                                 wide_tip(
-                                    "Choose the recording to review; the label shows the patient's sex and age.",                                    html.Div(
+                                    "Model used to predict the seizures. Every model is tested on patients it never saw during training.",
+                                    html.Div(
                                         dmc.Select(
-                                            id="recording", data=recordings, value=recordings[0]["value"], searchable=True, allowDeselect=False,
-                                            leftSection=icon("tabler:file-analytics", 16), comboboxProps={"withinPortal": True},
+                                            id="model", data=DATA.models, value=app_data.DEFAULT_MODEL, allowDeselect=False,
+                                            leftSection=icon("tabler:cpu", 16), comboboxProps={"withinPortal": True},
                                         )
                                     ),
                                 ),
+                            dmc.Stack(
+                                [
+                                    dmc.Group(
+                                        [
+                                            dmc.Text("Probability threshold", size="sm", fw=500),
+                                            dmc.Group(
+                                                [
+                                                    dmc.Text(id="threshold-value", className="mono", size="sm", c="violet"),
+                                                    tip(
+                                                        "Reset the threshold to the best value for the selected model (the one giving the highest event-level F1).",
+                                                        dmc.ActionIcon(icon("tabler:restore", 16), id="threshold-reset", variant="subtle", color="gray", size="sm", **{"aria-label": "Reset threshold"}),
+                                                    ),
+                                                ],
+                                                gap=4,
+                                            ),
+                                        ],
+                                        justify="space-between",
+                                    ),
+                                    wide_tip(
+                                        "A window counts as seizure when its probability reaches this value; detections and metrics update live.",                                html.Div(
+                                            dmc.Slider(
+                                                id="threshold", min=0.05, max=0.95, step=0.01, value=DATA.best_threshold(app_data.DEFAULT_MODEL), color="violet",
+                                                updatemode="mouseup", precision=2,
+                                                marks=[{"value": 0.25, "label": "0.25"}, {"value": 0.5, "label": "0.50"}, {"value": 0.75, "label": "0.75"}],
+                                            ),
+                                            style={"paddingBottom": 18},
+                                        ),
+                                    ),
+                                ],
+                                gap=6,
+                            ),
+                            ],
+                            gap="md",
+                        ),
+                        id="prediction-controls", style={"display": "none"},
+                    ),
+                    html.Div(
+                        dmc.Stack(
+                            [
+                                dmc.Divider(),
                                 section("Display"),
                                 wide_tip(
                                     "Stacked shows one row per channel like an EEG reader; Overlay draws the selected channels on one axis.",                                    dmc.SegmentedControl(
@@ -241,8 +269,18 @@ def sidebar():
                                         data=[{"value": "stacked", "label": "All stacked"}, {"value": "overlay", "label": "Overlay"}],
                                     ),
                                 ),
+                                dmc.Group(
+                                    [
+                                        dmc.Text("Channels", size="sm", fw=500),
+                                        tip(
+                                            "Show all eight channels again.",
+                                            dmc.Button("Show all", id="all-channels", variant="subtle", size="compact-xs", leftSection=icon("tabler:list-check", 12)),
+                                        ),
+                                    ],
+                                    justify="space-between", mb=-8,
+                                ),
                                 wide_tip(
-                                    "Channels to display, in montage order.",                                    html.Div(
+                                    "Curves to display: remove a channel with its ×, or pick one from the list to add it back.",                                    html.Div(
                                         dmc.MultiSelect(
                                             id="channels", data=list(CHANNELS), value=list(CHANNELS), clearable=False,
                                             leftSection=icon("tabler:wave-sine", 16), comboboxProps={"withinPortal": True},
@@ -289,8 +327,8 @@ def sidebar():
                     section("Legend"),
                     dmc.Stack(
                         [
-                            dmc.Text(swatch(REAL, "Real seizure (annotation)"), size="sm"),
-                            dmc.Text(swatch(DETECTED, "Detection"), size="sm"),
+                            dmc.Text(swatch(REAL, "Real seizure (annotation), also drawn on the curves"), size="sm"),
+                            dmc.Text(swatch(DETECTED, "Detection by the model"), size="sm"),
                             dmc.Text(swatch(EVENT, "Technician event"), size="sm"),
                             dmc.Text(swatch(THRESHOLD, "Threshold"), size="sm"),
                         ],
@@ -309,6 +347,28 @@ def overview_page():
     return html.Div(
         dmc.Stack(
             [
+                panel(
+                    [
+                        dmc.Group(
+                            [
+                                dmc.Stack(
+                                    [
+                                        dmc.Text("Model comparison", fw=600),
+                                        dmc.Text(
+                                            "Each model at its best threshold, tested on patients it never saw. Choose a model in the sidebar to see its results below.",
+                                            size="sm", c="dimmed",
+                                        ),
+                                    ],
+                                    gap=0,
+                                ),
+                                dmc.Badge("Out-of-fold predictions", variant="light", color="gray", leftSection=icon("tabler:shield-check", 12)),
+                            ],
+                            justify="space-between", align="flex-start", mb="xs",
+                        ),
+                        html.Div(id="model-table"),
+                    ]
+                ),
+                html.Div(id="kpi-title"),
                 dmc.SimpleGrid(id="kpis", cols={"base": 2, "md": 3, "xl": 5}, spacing="md"),
                 panel(
                     [
@@ -316,15 +376,14 @@ def overview_page():
                             [
                                 dmc.Stack(
                                     [
-                                        dmc.Text("Seizure timeline", fw=600),
+                                        dmc.Text("Seizure timeline of the selected model", fw=600),
                                         dmc.Text(
-                                            "One row per recording: real seizures above, detections below. Click a row to open it.",
+                                            "One row per patient: real seizures above, detections below. Click a row to open that patient in Prediction.",
                                             size="sm", c="dimmed",
                                         ),
                                     ],
                                     gap=0,
                                 ),
-                                dmc.Badge("Out-of-fold predictions", variant="light", color="gray", leftSection=icon("tabler:shield-check", 12)),
                             ],
                             justify="space-between", align="flex-start", mb="xs",
                         ),
@@ -337,7 +396,7 @@ def overview_page():
             ],
             gap="md",
         ),
-        id="page-overview",
+        id="page-overview", style={"display": "none"},
     )
 
 
@@ -346,7 +405,7 @@ def recording_page():
     return html.Div(
         dmc.Stack(
             [
-                panel(html.Div(id="recording-info")),
+                panel([html.Div(id="recording-info"), html.Div(id="verdict")]),
                 panel(
                     [
                         dmc.Group(
@@ -366,7 +425,7 @@ def recording_page():
                                     [
                                         dmc.Text(id="view-label", className="mono", size="sm", c="dimmed"),
                                         tip("Save the current view as a high-resolution PNG for the report.", dmc.Button("Save view as PNG", id="save-png", leftSection=icon("tabler:camera", 14), **button)),
-                                        tip("Download the real and detected intervals of this recording as a CSV file.", dmc.Button("Download intervals CSV", id="save-csv", leftSection=icon("tabler:download", 14), **button)),
+                                        tip("Download the seizure intervals of this patient as a CSV file (with the detections in Prediction).", dmc.Button("Download intervals CSV", id="save-csv", leftSection=icon("tabler:download", 14), **button)),
                                     ],
                                     gap="xs",
                                 ),
@@ -380,7 +439,7 @@ def recording_page():
                             delay_show=400, overlay_style={"visibility": "visible", "opacity": 0.5}, type="dot", target_components={"eeg": "figure"},
                         ),
                         dmc.Text(
-                            "Drag to zoom in time, double-click to reset, drag the slider under the probability plot to navigate. Click a trace to analyze that 2 s window.",
+                            "Curves turn green during a real seizure and a diamond marks each seizure start. Drag to zoom in time, double-click to reset, drag the slider under the bottom plot to navigate. Click a curve to analyze that 2 s window.",
                             size="xs", c="dimmed", mt=4,
                         ),
                     ]
@@ -402,13 +461,6 @@ def recording_page():
                         dmc.GridCol(
                             panel(
                                 [
-                                    dmc.Group(
-                                        [
-                                            dmc.Text("Real vs detected intervals", fw=600),
-                                            dmc.Text("times in seconds; errors are detected − real", size="xs", c="dimmed"),
-                                        ],
-                                        justify="space-between", mb="xs",
-                                    ),
                                     html.Div(id="intervals"),
                                 ],
                                 h="100%",
@@ -421,7 +473,7 @@ def recording_page():
             ],
             gap="md",
         ),
-        id="page-recording", style={"display": "none"},
+        id="page-recording",
     )
 
 
@@ -495,7 +547,7 @@ def shell_state(search, _, theme):
     recording = query.get("recording")
     return (
         query["theme"] if query.get("theme") in ("dark", "light") else no_update,
-        query["page"] if query.get("page") in ("overview", "recording") else no_update,
+        PAGES.get(query.get("page"), no_update),
         recording if recording in DATA.recordings else no_update,
     )
 
@@ -506,12 +558,15 @@ def apply_theme(theme):
 
 
 @app.callback(
-    Output("page-overview", "style"), Output("page-recording", "style"), Output("recording-controls", "style"),
+    Output("page-overview", "style"), Output("page-recording", "style"),
+    Output("recording-controls", "style"), Output("prediction-controls", "style"),
     Input("page", "value"),
 )
 def show_page(page):
     shown, hidden = {"display": "block"}, {"display": "none"}
-    return (shown, hidden, hidden) if page == "overview" else (hidden, shown, shown)
+    if page == "comparison":
+        return shown, hidden, hidden, shown
+    return hidden, shown, shown, (shown if page == "prediction" else hidden)
 
 
 @app.callback(Output("threshold-value", "children"), Input("threshold", "value"))
@@ -519,17 +574,56 @@ def threshold_label(threshold):
     return f"{threshold:.2f}"
 
 
-@app.callback(Output("threshold", "value"), Input("threshold-reset", "n_clicks"), prevent_initial_call=True)
-def reset_threshold(_):
-    return DATA.default_threshold
+@app.callback(
+    Output("threshold", "value"), Input("model", "value"), Input("threshold-reset", "n_clicks"),
+    prevent_initial_call=True,
+)
+def model_threshold(model, _):
+    """Each model starts at its own best threshold; the reset button returns to it."""
+    return DATA.best_threshold(model)
+
+
+@app.callback(Output("channels", "value"), Input("all-channels", "n_clicks"), prevent_initial_call=True)
+def show_all_channels(_):
+    return list(CHANNELS)
 
 
 # ----------------------------------------------------------------------------- overview
 
 
-@app.callback(Output("kpis", "children"), Output("timeline", "figure"), Input("threshold", "value"), Input("theme", "data"))
-def overview(threshold, theme):
-    detected, matches, metrics = DATA.detect_everything(threshold)
+def model_table(selected: str, recording: str):
+    """All models side by side: overall scores and the result on the selected patient."""
+    head = ["Model", "Threshold", "Event F1", "Recall", "Precision", "Found / missed", "False alarms", "Window F1", f"On {recording}"]
+    best = DATA.comparison["event_f1"].max()
+    rows = []
+    for row in DATA.comparison.itertuples(index=False):
+        _, _, patient = DATA.detect(recording, row.threshold, row.model)
+        name = [dmc.Text(row.model, fw=600, size="sm", span=True)]
+        if row.model == selected:
+            name.append(dmc.Badge("Selected", size="xs", variant="light", color="teal", ml=6))
+        if row.event_f1 == best:
+            name.append(dmc.Badge("Best F1", size="xs", variant="light", color="violet", ml=6))
+        cells = [
+            name, f"{row.threshold:.2f}", f"{row.event_f1:.2f}", f"{row.event_recall:.0%}", f"{row.event_precision:.0%}",
+            f"{row.found} / {row.missed}", f"{row.false_alarms} ({row.false_alarms_per_hour:.1f}/h)", f"{row.window_f1:.2f}",
+            f"{patient['tp']}/{patient['tp'] + patient['fn']} found · {patient['fp']} false",
+        ]
+        rows.append(dmc.TableTr([dmc.TableTd(cell, className="" if index == 0 else "mono") for index, cell in enumerate(cells)]))
+    return dmc.TableScrollContainer(
+        dmc.Table(
+            [dmc.TableThead(dmc.TableTr([dmc.TableTh(name, style={"whiteSpace": "nowrap"}) for name in head])), dmc.TableTbody(rows)],
+            striped=True, highlightOnHover=True, verticalSpacing=8, fz="sm",
+        ),
+        minWidth=860, type="native",
+    )
+
+
+@app.callback(
+    Output("model-table", "children"), Output("kpi-title", "children"), Output("kpis", "children"), Output("timeline", "figure"),
+    Input("threshold", "value"), Input("theme", "data"), Input("model", "value"), Input("recording", "value"),
+)
+def comparison(threshold, theme, model, recording):
+    detected, matches, metrics = DATA.detect_everything(threshold, model)
     total = metrics["tp"] + metrics["fn"]
     cards = [
         kpi("Event F1", f"{metrics['f1']:.2f}", "balance of recall and precision", "tabler:target-arrow", "teal"),
@@ -538,7 +632,11 @@ def overview(threshold, theme):
         kpi("Found / missed", f"{metrics['tp']} / {metrics['fn']}", "annotated seizures", "tabler:checks", "green"),
         kpi("False alarms", f"{metrics['fp']}", f"{metrics['false_alarms_per_hour']:.1f} per recorded hour", "tabler:alert-triangle", "red"),
     ]
-    return cards, overview_figure(DATA.metadata, DATA.annotations, detected, matches, theme)
+    title = dmc.Text(
+        ["Selected model: ", dmc.Text(model, fw=700, span=True), " at threshold ", dmc.Text(f"{threshold:.2f}", className="mono", span=True), ", all patients"],
+        size="sm", c="dimmed",
+    )
+    return model_table(model, recording), title, cards, overview_figure(DATA.metadata, DATA.annotations, detected, matches, theme)
 
 
 @app.callback(
@@ -552,23 +650,98 @@ def open_recording(click):
     recording = custom if isinstance(custom, str) else (custom[0] if custom else None)
     if recording not in DATA.recordings:
         return no_update, no_update
-    return recording, "recording"
+    return recording, "prediction"
 
 
 # ----------------------------------------------------------------------------- recording page
 
 
-@app.callback(Output("recording-info", "children"), Output("intervals", "children"), Input("recording", "value"), Input("threshold", "value"))
-def recording_summary(recording, threshold):
+def card_title(title: str, note: str):
+    return dmc.Group([dmc.Text(title, fw=600), dmc.Text(note, size="xs", c="dimmed")], justify="space-between", mb="xs")
+
+
+def real_table(real: pd.DataFrame):
+    if real.empty:
+        return dmc.Text("No seizure is annotated for this patient.", c="dimmed", size="sm", py="lg", ta="center")
+    rows = [
+        dmc.TableTr([dmc.TableTd(cell, className="mono") for cell in (str(number), f"{row.start_s:.1f}", f"{row.end_s:.1f}", f"{row.end_s - row.start_s:.1f}")])
+        for number, row in enumerate(real.itertuples(index=False), 1)
+    ]
+    return dmc.TableScrollContainer(
+        dmc.Table(
+            [dmc.TableThead(dmc.TableTr([dmc.TableTh(name) for name in ("Seizure", "Start (s)", "End (s)", "Duration (s)")])), dmc.TableTbody(rows)],
+            striped=True, highlightOnHover=True, verticalSpacing=6, fz="sm", stickyHeader=True,
+        ),
+        minWidth=360, mah=330, type="native",
+    )
+
+
+def verdict(model: str, threshold: float, metrics: dict):
+    """Plain statement of how the model did on this patient, with the rule used for the label."""
+    total = metrics["tp"] + metrics["fn"]
+    if total and metrics["fn"] == 0 and metrics["fp"] == 0:
+        label, color, icon_name = "Predicts well", "teal", "tabler:circle-check"
+    elif total and (metrics["tp"] < total / 2 or metrics["fp"] > 2 * total):
+        label, color, icon_name = "Predicts poorly", "red", "tabler:circle-x"
+    else:
+        label, color, icon_name = "Partly correct", "yellow", "tabler:alert-circle"
+    window = metrics["window"]
+    share = lambda value: "—" if pd.isna(value) else f"{value:.0%}"
+    sentence = (
+        f"{model} at threshold {threshold:.2f} found {metrics['tp']} of {total} real seizures, missed {metrics['fn']} "
+        f"and raised {metrics['fp']} false alarm{'s' if metrics['fp'] != 1 else ''}."
+    )
+    return dmc.Stack(
+        [
+            dmc.Divider(my="sm"),
+            dmc.Group(
+                [
+                    dmc.Group(
+                        [
+                            tip(
+                                "Well: every real seizure found and no false alarm. Poorly: fewer than half found, or more than two false alarms per real seizure. Otherwise partly correct.",
+                                dmc.Badge(label, color=color, size="lg", variant="light", leftSection=icon(icon_name, 14)),
+                            ),
+                            dmc.Text(sentence, size="sm"),
+                        ],
+                        gap="sm",
+                    ),
+                    dmc.Group(
+                        [
+                            dmc.Badge(f"{metrics['tp']} found", color="teal", variant="light", leftSection=icon("tabler:check", 12)),
+                            dmc.Badge(f"{metrics['fn']} missed", color="gray", variant="light", leftSection=icon("tabler:eye-off", 12)),
+                            dmc.Badge(f"{metrics['fp']} false alarms", color="red", variant="light", leftSection=icon("tabler:alert-triangle", 12)),
+                        ],
+                        gap="xs",
+                    ),
+                ],
+                justify="space-between",
+            ),
+            dmc.Text(
+                f"Per 2 s window: {window['tp']} seizure windows detected out of {window['tp'] + window['fn']} (recall {share(window['recall'])}); "
+                f"{window['fp']} normal windows flagged by mistake (precision {share(window['precision'])}). "
+                "The model never saw this patient during training."
+                + (" A false alarm is a detection outside the annotated seizures; it can also be a real seizure missing from the annotation file." if metrics["fp"] else ""),
+                size="xs", c="dimmed",
+            ),
+        ],
+        gap=6,
+    )
+
+
+@app.callback(
+    Output("recording-info", "children"), Output("verdict", "children"), Output("intervals", "children"),
+    Input("recording", "value"), Input("threshold", "value"), Input("model", "value"), Input("page", "value"),
+)
+def recording_summary(recording, threshold, model, page):
     info = DATA.info(recording)
-    _, matches, metrics = DATA.detect(recording, threshold)
     minutes, rest = divmod(int(info["duration_s"]), 60)
     facts = [
-        ("tabler:user", "Subject", recording),
+        ("tabler:user", "Patient", recording),
         ("tabler:gender-bigender", "Sex", {"M": "Male", "F": "Female"}.get(info["sex"], str(info["sex"]))),
         ("tabler:cake", "Age", f"{info['age']} y"),
         ("tabler:clock", "Duration", f"{minutes} min {rest:02d} s"),
-        ("tabler:activity", "Annotated seizures", f"{info['seizures']} ({info['seizure_seconds']:.0f} s)"),
+        ("tabler:activity", "Real seizures", f"{info['seizures']} ({info['seizure_seconds']:.0f} s)"),
     ]
     left = dmc.Group(
         [
@@ -583,11 +756,7 @@ def recording_summary(recording, threshold):
         ],
         gap="xl",
     )
-    badges = [
-        dmc.Badge(f"{metrics['tp']} found", color="teal", variant="light", leftSection=icon("tabler:check", 12)),
-        dmc.Badge(f"{metrics['fn']} missed", color="gray", variant="light", leftSection=icon("tabler:eye-off", 12)),
-        dmc.Badge(f"{metrics['fp']} false alarms", color="red", variant="light", leftSection=icon("tabler:alert-triangle", 12)),
-    ]
+    badges = []
     if info["annotation_source"] == "fallback":
         badges.append(
             tip(
@@ -597,7 +766,13 @@ def recording_summary(recording, threshold):
         )
     if info["absence_type"]:
         badges.append(dmc.Badge(f"Type: {info['absence_type']}", color="gray", variant="outline"))
-    return dmc.Group([left, dmc.Group(badges, gap="xs")], justify="space-between"), intervals_table(matches)
+    header_row = dmc.Group([left, dmc.Group(badges, gap="xs")], justify="space-between")
+    if page != "prediction":
+        table = [card_title("Real seizures of this patient", "from the annotations; times in seconds"), real_table(DATA.real(recording))]
+        return header_row, None, table
+    _, matches, metrics = DATA.detect(recording, threshold, model)
+    table = [card_title(f"Real vs predicted — {model}", "times in seconds; errors are detected − real"), intervals_table(matches)]
+    return header_row, verdict(model, threshold, metrics), table
 
 
 def page_length(value: str, duration: float) -> float:
@@ -612,10 +787,17 @@ def clamp(start: float, length: float, duration: float) -> list[float]:
 @app.callback(
     Output("eeg", "figure"), Output("figure-meta", "data"), Output("view", "data"),
     Input("recording", "value"), Input("channels", "value"), Input("mode", "value"), Input("gain", "value"),
-    Input("events", "checked"), Input("theme", "data"),
+    Input("events", "checked"), Input("theme", "data"), Input("page", "value"), Input("model", "value"),
     State("threshold", "value"), State("view", "data"), State("page-length", "value"), State("session", "data"),
 )
-def build_eeg(recording, channels, mode, gain, show_events, theme, threshold, view, length, session):
+def build_eeg(recording, channels, mode, gain, show_events, theme, page, model, threshold, view, length, session):
+    if page == "comparison":
+        # The EEG is hidden on this page; keep whatever is drawn.
+        return no_update, no_update, no_update
+    prediction = page == "prediction"
+    if ctx.triggered_id == "model":
+        # The slider is moving to this model's best threshold at the same time.
+        threshold = DATA.best_threshold(model)
     try:
         frame = app_data.signal(recording)
     except app_data.MissingData as error:
@@ -628,10 +810,11 @@ def build_eeg(recording, channels, mode, gain, show_events, theme, threshold, vi
         view_range = clamp(0.0, page_length(length, duration), duration)
     else:
         view_range = view["range"]
-    detected, _, _ = DATA.detect(recording, threshold)
+    detected = DATA.detect(recording, threshold, model)[0] if prediction else None
     figure, description = recording_figure(
-        frame["Time"].to_numpy(), {channel: frame[channel].to_numpy() for channel in channels}, DATA.windows(recording),
-        DATA.real(recording), detected, DATA.technician(recording) if show_events else None, threshold,
+        frame["Time"].to_numpy(), {channel: frame[channel].to_numpy() for channel in channels},
+        DATA.windows(recording, model) if prediction else None,
+        DATA.real(recording), detected, DATA.technician(recording) if show_events else None, threshold if prediction else None,
         stacked=mode == "stacked", full_scale=app_data.amplitude_scale(recording), gain=0.5 * 2 ** gain,
         view=tuple(view_range), theme=theme,
     )
@@ -639,7 +822,7 @@ def build_eeg(recording, channels, mode, gain, show_events, theme, threshold, vi
     FIGURES.move_to_end(session)
     while len(FIGURES) > MAX_SESSIONS:
         FIGURES.popitem(last=False)
-    description.update({"recording": recording, "channels": channels})
+    description.update({"recording": recording, "channels": channels, "model": model})
     return resampled_dict(figure, tuple(view_range)), description, {"recording": recording, "range": view_range}
 
 
@@ -724,9 +907,9 @@ def view_label(view):
 )
 def update_detections(threshold, meta, theme):
     """Threshold changes only redraw the shading and the threshold line."""
-    if not meta:
+    if not meta or not meta.get("prediction"):
         return no_update
-    detected, _, _ = DATA.detect(meta["recording"], threshold)
+    detected, _, _ = DATA.detect(meta["recording"], threshold, meta["model"])
     patch = Patch()
     patch["layout"]["shapes"] = event_shapes(DATA.real(meta["recording"]), detected, threshold, meta["probability_ref"], theme)
     return patch
@@ -774,17 +957,26 @@ def show_spectrum(point, theme, channels):
 
 
 @app.callback(
-    Output("download", "data"), Input("save-csv", "n_clicks"), State("recording", "value"), State("threshold", "value"),
+    Output("download", "data"), Input("save-csv", "n_clicks"),
+    State("recording", "value"), State("threshold", "value"), State("model", "value"), State("page", "value"),
     prevent_initial_call=True,
 )
-def download_intervals(_, recording, threshold):
-    _, matches, _ = DATA.detect(recording, threshold)
+def download_intervals(_, recording, threshold, model, page):
+    if page != "prediction":
+        real = DATA.real(recording)
+        table = real.assign(duration_s=real["end_s"] - real["start_s"])
+        table.insert(0, "recording", recording)
+        table.insert(1, "seizure", range(1, len(table) + 1))
+        return dcc.send_data_frame(table.to_csv, f"{recording}_real_seizures.csv", index=False)
+    _, matches, _ = DATA.detect(recording, threshold, model)
     table = matches.rename(columns={"status": "status_code"})
     table.insert(0, "recording", recording)
-    table.insert(1, "threshold", threshold)
-    table.insert(2, "status", table["status_code"].map({code: label for code, (label, _, _) in STATUS.items()}))
+    table.insert(1, "model", model)
+    table.insert(2, "threshold", threshold)
+    table.insert(3, "status", table["status_code"].map({code: label for code, (label, _, _) in STATUS.items()}))
     table = table.drop(columns="status_code").round({"max_proba": 2})
-    return dcc.send_data_frame(table.to_csv, f"{recording}_intervals_threshold_{threshold:.2f}.csv", index=False)
+    name = f"{recording}_{model.lower().replace(' ', '_')}_threshold_{threshold:.2f}.csv"
+    return dcc.send_data_frame(table.to_csv, name, index=False)
 
 
 # High-resolution PNG of the current view on the theme's panel color.
