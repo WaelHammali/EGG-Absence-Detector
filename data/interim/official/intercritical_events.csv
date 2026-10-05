@@ -1,0 +1,19 @@
+recording,event_id,clock_s,event_s,Class,source_row,source_column,inside_recording,note
+190304A_E,1,37359.0,544.0,0,2,Intercrit1,yes,"Official clock point; interictal, not a seizure."
+210504B_C,1,47246.0,988.0,0,6,Intercrit1,yes,"Official clock point; interictal, not a seizure."
+210504B_C,2,47891.0,1633.0,0,6,Intercrit2,yes,"Official clock point; interictal, not a seizure."
+210504B_C,3,47958.0,1700.0,0,6,Intercrit5,yes,"Official clock point; interictal, not a seizure."
+230102B_F,1,44532.0,1039.0,0,15,Intercrit1,yes,"Official clock point; interictal, not a seizure."
+210204B_C,1,37480.0,313.5,0,5,Intercrit1,yes,Interictal point event; not a seizure interval.
+210204B_C,2,37481.0,314.5,0,5,Intercrit2,yes,Interictal point event; not a seizure interval.
+210204B_C,3,37482.0,315.5,0,5,Intercrit3,yes,Interictal point event; not a seizure interval.
+210204B_C,4,37568.0,401.5,0,5,Intercrit4,yes,Interictal point event; not a seizure interval.
+210204B_C,5,37573.0,406.5,0,5,Intercrit5,yes,Interictal point event; not a seizure interval.
+210204B_C,6,37877.0,710.5,0,5,Intercrit6,yes,Interictal point event; not a seizure interval.
+210204B_C,7,37964.0,797.5,0,5,Intercrit7,yes,Interictal point event; not a seizure interval.
+210208B_G,1,40639.0,382.75,0,6,Intercrit1,yes,Interictal point event; not a seizure interval.
+210208B_G,2,40640.0,383.75,0,6,Intercrit2,yes,Interictal point event; not a seizure interval.
+210208B_G,3,40730.0,473.75,0,6,Intercrit3,yes,Interictal point event; not a seizure interval.
+210208B_G,4,40744.0,487.75,0,6,Intercrit4,yes,Interictal point event; not a seizure interval.
+210208B_G,5,40902.0,645.75,0,6,Intercrit5,yes,Interictal point event; not a seizure interval.
+210208B_G,6,40942.0,685.75,0,6,Intercrit6,yes,Interictal point event; not a seizure interval.

@@ -1,5 +1,6 @@
-"""Build one window-feature row per 2 s / 50%-overlap EEG segment."""
+"""Resolve annotations, convert recordings, and build the window-feature dataset."""
 
+from argparse import ArgumentParser
 from pathlib import Path
 import csv
 import json
@@ -13,18 +14,15 @@ import pyarrow.parquet as pq
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from convert_to_excel import convert_recording
+from src.annotations import resolve_annotations
 from src.features import extract_features
-from src.io import CHANNELS, annotations_for_recording, load_annotations
+from src.io import CHANNELS, annotations_for_recording
 from src.segmentation import segment_labels, window_view
 
 
 PROCESSED = ROOT / "data/processed"
-ANNOTATIONS = ROOT / "data/interim/annotations_clean.csv"
-EXCLUSIONS = ROOT / "data/interim/exclusions.csv"
-OUTPUT = PROCESSED / "windows_features.parquet"
-REPORT_CSV = ROOT / "outputs/window_counts.csv"
-REPORT_JSON = ROOT / "outputs/dataset_summary.json"
-REPORT_MD = ROOT / "docs/DATASET_PARTS_I_VI.md"
+EXCEL = ROOT / "data/excel"
 
 
 def seizure_window_coverage(segmentation, intervals: pd.DataFrame, fs: float = 256.0) -> tuple[int, int]:
@@ -40,19 +38,20 @@ def seizure_window_coverage(segmentation, intervals: pd.DataFrame, fs: float = 2
     return represented, len(intervals)
 
 
-def main() -> None:
-    annotations = load_annotations(ANNOTATIONS)
-    excluded = set(pd.read_csv(EXCLUSIONS)["recording"])
-    recording_files = sorted(
-        path for path in PROCESSED.glob("*.parquet")
-        if path.stem != "windows_features" and path.stem not in excluded
-    )
-    expected = sorted(set(annotations["recording"]) - excluded)
-    actual = [path.stem for path in recording_files]
-    if actual != expected:
-        raise ValueError(f"Converted recordings do not match expected set. Expected {expected}; found {actual}")
+def build_feature_dataset(
+    mode: str,
+    annotations: pd.DataFrame,
+    excluded: set[str],
+    processed_dir: Path,
+    output: Path,
+) -> tuple[list[dict], dict]:
+    recordings = sorted(set(annotations["recording"]) - excluded)
+    recording_files = [processed_dir / f"{recording}.parquet" for recording in recordings]
+    missing = [path for path in recording_files if not path.exists()]
+    if missing:
+        raise FileNotFoundError(f"Missing converted files: {missing}")
 
-    temporary = OUTPUT.with_name("windows_features.tmp.parquet")
+    temporary = output.with_name(output.stem + ".tmp.parquet")
     writer = None
     report_rows = []
     try:
@@ -76,9 +75,9 @@ def main() -> None:
                     "end_s": segmentation.end_s.astype(np.float32),
                 }
             )
-            output = pd.concat([metadata, features], axis=1)
-            output["class"] = segmentation.classes
-            table = pa.Table.from_pandas(output, preserve_index=False)
+            result = pd.concat([metadata, features], axis=1)
+            result["class"] = segmentation.classes
+            table = pa.Table.from_pandas(result, preserve_index=False)
             if writer is None:
                 writer = pq.ParquetWriter(temporary, table.schema, compression="zstd")
             writer.write_table(table)
@@ -101,17 +100,17 @@ def main() -> None:
                 }
             )
             print(
-                f"{recording}: windows={total:,}, class1={class_1:,}, "
+                f"{mode}/{recording}: windows={total:,}, class1={class_1:,}, "
                 f"represented seizures={represented}/{seizure_count}",
                 flush=True,
             )
-            del frame, signal, labels, windows, features, output, table
+            del frame, signal, labels, windows, features, result, table
     finally:
         if writer is not None:
             writer.close()
     if writer is None:
         raise RuntimeError("No recordings were written")
-    temporary.replace(OUTPUT)
+    temporary.replace(output)
 
     total_windows = sum(row["total_windows"] for row in report_rows)
     total_1 = sum(row["class_1"] for row in report_rows)
@@ -128,13 +127,176 @@ def main() -> None:
         "seizures_with_positive_window": represented,
         "seizures_without_positive_window": total_seizures - represented,
     }
-    all_rows = report_rows + [overall]
-    REPORT_CSV.parent.mkdir(parents=True, exist_ok=True)
-    with REPORT_CSV.open("w", newline="") as handle:
-        writer_csv = csv.DictWriter(handle, fieldnames=list(overall))
-        writer_csv.writeheader()
-        writer_csv.writerows(all_rows)
+    return report_rows, overall
+
+
+def provisional_reference() -> tuple[list[dict], dict] | None:
+    report_path = ROOT / "outputs/window_counts.csv"
+    if report_path.exists():
+        frame = pd.read_csv(report_path)
+        rows = frame.loc[frame["recording"] != "OVERALL"].to_dict("records")
+        overall_rows = frame.loc[frame["recording"] == "OVERALL"]
+        if not overall_rows.empty:
+            return rows, overall_rows.iloc[0].to_dict()
+    dataset = PROCESSED / "windows_features.parquet"
+    if not dataset.exists():
+        return None
+    frame = pd.read_parquet(dataset, columns=["recording", "class"])
+    rows = []
+    for recording, group in frame.groupby("recording"):
+        total = len(group)
+        class_1 = int(group["class"].sum())
+        rows.append({"recording": recording, "total_windows": total, "class_0": total - class_1, "class_1": class_1})
+    total = len(frame)
+    class_1 = int(frame["class"].sum())
+    return rows, {"recording": "OVERALL", "total_windows": total, "class_0": total - class_1, "class_1": class_1}
+
+
+def compare_reports(official_rows: list[dict], official_overall: dict) -> dict | None:
+    reference = provisional_reference()
+    if reference is None:
+        return None
+    provisional_rows, provisional_overall = reference
+    official = {row["recording"]: row for row in official_rows}
+    provisional = {row["recording"]: row for row in provisional_rows}
+    rows = []
+    for recording in sorted(set(official) | set(provisional)):
+        new = official.get(recording)
+        old = provisional.get(recording)
+        new_windows = 0 if new is None else int(new["total_windows"])
+        old_windows = 0 if old is None else int(old["total_windows"])
+        new_class_1 = 0 if new is None else int(new["class_1"])
+        old_class_1 = 0 if old is None else int(old["class_1"])
+        rows.append(
+            {
+                "recording": recording,
+                "provisional_windows": old_windows,
+                "official_windows": new_windows,
+                "delta_windows": new_windows - old_windows,
+                "provisional_class_1": old_class_1,
+                "official_class_1": new_class_1,
+                "delta_class_1": new_class_1 - old_class_1,
+            }
+        )
+    return {
+        "per_recording": rows,
+        "overall": {
+            "provisional_windows": int(provisional_overall["total_windows"]),
+            "official_windows": int(official_overall["total_windows"]),
+            "delta_windows": int(official_overall["total_windows"] - provisional_overall["total_windows"]),
+            "provisional_class_1": int(provisional_overall["class_1"]),
+            "official_class_1": int(official_overall["class_1"]),
+            "delta_class_1": int(official_overall["class_1"] - provisional_overall["class_1"]),
+        },
+    }
+
+
+def write_csv(path: Path, rows: list[dict], overall: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(overall))
+        writer.writeheader()
+        writer.writerows(rows + [overall])
+
+
+def write_decisions(mode: str, resolution: dict) -> None:
+    if mode != "official":
+        return
+    lines = [
+        "# Annotation decisions",
+        "",
+        "Generated from `config/annotation_decisions.yaml`. Edit that file after the professor replies, then rerun `python scripts/build_dataset.py --annotations official`.",
+        "",
+        "The official rule is `elapsed = clock annotation − DebutTrace`, with midnight rollover when needed. Raw workbooks are never modified.",
+        "",
+        "## Applied decisions",
+        "",
+    ]
+    lines.extend(f"- {decision}" for decision in resolution["decisions"])
+    lines += ["", "## Signal scores used by configurable decisions", ""]
+    for key, values in resolution["scores"].items():
+        lines += [f"### {key}", "", "| Source row | Score | Inside/outside ratio | Inside windows |", "|---:|---:|---:|---:|"]
+        for value in values:
+            row = value.get("source_row", "—")
+            lines.append(f"| {row} | {value['score']:.6f} | {value['inside_outside_ratio']:.3f} | {value['inside_windows']} |")
+        lines.append("")
+    lines += ["## Exclusions", ""]
+    lines.extend(f"- `{recording}`: {reason}" for recording, reason in resolution["excluded"].items())
+    lines += [
+        "",
+        "Records marked `fallback` in `data/interim/official/offsets.csv` use provisional intervals because they are absent from the updated workbook. All other included rows use method `official`.",
+        "",
+    ]
+    (ROOT / "docs/ANNOTATION_DECISIONS.md").write_text("\n".join(lines))
+
+
+def write_report(mode: str, summary: dict) -> None:
+    rows = summary["per_recording"]
+    overall = summary["overall"]
+    lines = [
+        f"# Dataset report — {mode.capitalize()} annotations",
+        "",
+        "The dataset contains 2 s windows (512 samples at 256 Hz) with a 1 s hop. A window is positive when at least 256 samples are inside a seizure interval. Features use Fp1, Fp2, C3, C4, T3, T4, O1 and O2.",
+        "",
+        "| Recording | Windows | Class 0 | Class 1 | Class 0 % | Class 1 % | Seizures represented / total |",
+        "|---|---:|---:|---:|---:|---:|---:|",
+    ]
+    for row in rows + [overall]:
+        lines.append(
+            f"| {row['recording']} | {row['total_windows']} | {row['class_0']} | {row['class_1']} | "
+            f"{row['class_0_percent']:.3f} | {row['class_1_percent']:.3f} | "
+            f"{row['seizures_with_positive_window']} / {row['seizures_total']} |"
+        )
+    comparison = summary.get("comparison_with_provisional")
+    if comparison:
+        value = comparison["overall"]
+        lines += [
+            "",
+            "## Comparison with the preserved provisional dataset",
+            "",
+            f"The official build has {value['official_windows']} windows versus {value['provisional_windows']} provisional ({value['delta_windows']:+d}), and {value['official_class_1']} positive windows versus {value['provisional_class_1']} ({value['delta_class_1']:+d}).",
+            "",
+            "| Recording | Provisional windows | Official windows | Δ windows | Provisional class 1 | Official class 1 | Δ class 1 |",
+            "|---|---:|---:|---:|---:|---:|---:|",
+        ]
+        for row in comparison["per_recording"]:
+            lines.append(
+                f"| {row['recording']} | {row['provisional_windows']} | {row['official_windows']} | {row['delta_windows']:+d} | "
+                f"{row['provisional_class_1']} | {row['official_class_1']} | {row['delta_class_1']:+d} |"
+            )
+    lines += [
+        "",
+        "Features comprise per-channel and channel-average time statistics, absolute Delta/Theta/Alpha/Beta powers, and relative band powers. No model training or splitting is performed.",
+        "",
+    ]
+    (ROOT / f"docs/DATASET_PARTS_I_VI_{mode.upper()}.md").write_text("\n".join(lines))
+
+
+def main() -> None:
+    parser = ArgumentParser()
+    parser.add_argument("--annotations", choices=["official", "provisional"], required=True)
+    parser.add_argument("--decisions", help="Optional path to annotation_decisions.yaml")
+    args = parser.parse_args()
+    mode = args.annotations
+    interim_dir = ROOT / f"data/interim/{mode}"
+    excel_dir = EXCEL / mode
+    processed_dir = PROCESSED / mode
+    output = PROCESSED / f"windows_features_{mode}.parquet"
+    resolution = resolve_annotations(ROOT, mode, interim_dir, args.decisions)
+    annotations = resolution["annotations"]
+    excluded = set(resolution["excluded"])
+    recordings = sorted(set(annotations["recording"]) - excluded)
+
+    for recording in recordings:
+        convert_recording(recording, force=True, annotations=annotations, excel_dir=excel_dir, processed_dir=processed_dir)
+
+    report_rows, overall = build_feature_dataset(mode, annotations, excluded, processed_dir, output)
+    comparison = compare_reports(report_rows, overall) if mode == "official" else None
+    report_csv = ROOT / f"outputs/window_counts_{mode}.csv"
+    report_json = ROOT / f"outputs/dataset_summary_{mode}.json"
+    write_csv(report_csv, report_rows, overall)
     summary = {
+        "annotation_mode": mode,
         "parameters": {
             "sampling_frequency_hz": 256,
             "window_seconds": 2,
@@ -147,48 +309,14 @@ def main() -> None:
         },
         "per_recording": report_rows,
         "overall": overall,
-        "dataset_columns": pq.read_schema(OUTPUT).names,
+        "comparison_with_provisional": comparison,
+        "dataset_columns": pq.read_schema(output).names,
     }
-    REPORT_JSON.write_text(json.dumps(summary, indent=2) + "\n")
-    write_markdown(summary)
-    print(f"Dataset: {OUTPUT}")
+    report_json.write_text(json.dumps(summary, indent=2) + "\n")
+    write_decisions(mode, resolution)
+    write_report(mode, summary)
+    print(f"Dataset: {output}")
     print(f"Overall: {overall}")
-
-
-def write_markdown(summary: dict) -> None:
-    rows = summary["per_recording"]
-    overall = summary["overall"]
-    lines = [
-        "# Dataset report — Parts I–VI",
-        "",
-        "The dataset contains 2 s windows (512 samples at 256 Hz) with a 1 s hop. A window is positive when at least 256 samples are inside a cleaned seizure interval. Features use only Fp1, Fp2, C3, C4, T3, T4, O1 and O2.",
-        "",
-        "`200625A_F` is excluded because it is unannotated. `210427B_C` is excluded because both competing alignments contain convincing spike-and-wave activity, so its single Excel interval cannot be assigned uniquely. The comparison is [here](../outputs/figures/offset_alignment/210427B_C_candidate_comparison.png).",
-        "",
-        "| Recording | Windows | Class 0 | Class 1 | Class 0 % | Class 1 % | Seizures represented / total |",
-        "|---|---:|---:|---:|---:|---:|---:|",
-    ]
-    for row in rows + [overall]:
-        lines.append(
-            f"| {row['recording']} | {row['total_windows']} | {row['class_0']} | {row['class_1']} | "
-            f"{row['class_0_percent']:.3f} | {row['class_1_percent']:.3f} | "
-            f"{row['seizures_with_positive_window']} / {row['seizures_total']} |"
-        )
-    lines += [
-        "",
-        "Feature columns comprise, per channel and averaged across channels: mean, standard deviation, variance, minimum, maximum, amplitude, RMS, energy, absolute Delta/Theta/Alpha/Beta power, and relative Delta/Theta/Alpha/Beta power. Spectral power uses a mean-removed 2 s signal, Hann window and one-sided rFFT periodogram.",
-        "",
-        "Artifacts:",
-        "",
-        "- `data/excel/<recording>.xlsx`: labeled samples, split automatically at 1,048,575 data rows per sheet.",
-        "- `data/processed/<recording>.parquet`: fast labeled sample copies.",
-        "- `data/processed/windows_features.parquet`: final Parts I–VI feature table.",
-        "- `outputs/window_counts.csv` and `outputs/dataset_summary.json`: machine-readable counts and schema.",
-        "",
-        "No model training or train/test splitting has been performed.",
-        "",
-    ]
-    REPORT_MD.write_text("\n".join(lines))
 
 
 if __name__ == "__main__":

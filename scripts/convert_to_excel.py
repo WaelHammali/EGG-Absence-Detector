@@ -46,14 +46,23 @@ def write_excel(frame: pd.DataFrame, path: Path) -> None:
     temporary.replace(path)
 
 
-def convert_recording(recording: str, force: bool = False) -> None:
-    excel_path = EXCEL_DIR / f"{recording}.xlsx"
-    parquet_path = PROCESSED_DIR / f"{recording}.parquet"
+def convert_recording(
+    recording: str,
+    force: bool = False,
+    annotations: pd.DataFrame | None = None,
+    excel_dir: Path = EXCEL_DIR,
+    processed_dir: Path = PROCESSED_DIR,
+) -> None:
+    excel_dir.mkdir(parents=True, exist_ok=True)
+    processed_dir.mkdir(parents=True, exist_ok=True)
+    excel_path = excel_dir / f"{recording}.xlsx"
+    parquet_path = processed_dir / f"{recording}.parquet"
     if not force and excel_path.exists() and parquet_path.exists():
         print(f"{recording}: outputs already exist; skipped", flush=True)
         return
     frame = load_recording(RAW / f"{recording}_0000d.mat")
-    annotations = load_annotations(ANNOTATIONS)
+    if annotations is None:
+        annotations = load_annotations(ANNOTATIONS)
     intervals = annotations_for_recording(annotations, recording)
     if intervals.empty:
         raise ValueError(f"{recording}: included recording has no cleaned seizure annotations")
@@ -90,4 +99,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

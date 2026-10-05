@@ -1,0 +1,49 @@
+version: 1
+
+sources:
+  official_workbook: "Annotations MAJ.xlsx"
+  provisional_annotations: "data/interim/annotations_clean.csv"
+  provisional_offsets: "data/interim/offsets.csv"
+  provisional_intercritical: "data/interim/intercritical_events.csv"
+
+official:
+  validation_recordings: [210427B_C]
+
+  excluded_recordings:
+    200625A_F: "No annotations; status remains unknown rather than confirmed seizure-free."
+
+  missing_recordings:
+    210204B_C:
+      strategy: fallback_provisional
+      note: "Missing from Annotations MAJ.xlsx; retain the previously aligned intervals until the professor replies."
+    210208B_G:
+      strategy: fallback_provisional
+      note: "Missing from Annotations MAJ.xlsx; retain the previously aligned intervals until the professor replies."
+
+  duplicate_recordings:
+    230406B_A:
+      strategy: best_signal_score
+      candidate_rows: [11, 19]
+    230515B_G:
+      strategy: best_signal_score
+      candidate_rows: [12, 20]
+
+  corrections:
+    210504B_C:
+      seizure_number: 1
+      strategy: signal_confirmed
+      replacement_end_clock: "12:51:06"
+      minimum_inside_outside_ratio: 1.0
+      if_not_confirmed: drop
+      note: "Treat workbook FinCE1 18:51:06 as 12:51:06 only when 2.5–4 Hz activity supports the corrected interval."
+
+  scoring:
+    window_seconds: 2.0
+    hop_seconds: 0.25
+    target_band_hz: [2.5, 4.0]
+    denominator_band_hz: [0.5, 30.0]
+
+provisional:
+  excluded_recordings:
+    200625A_F: "No annotations; status unknown."
+    210427B_C: "Ambiguous inferred alignment; retained only in the official build when DebutTrace is available."
