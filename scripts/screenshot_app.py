@@ -83,11 +83,15 @@ def main() -> None:
         for theme in ("dark", "light"):
             driver.set_window_size(args.width, 900)
             driver.get(f"{base}/?theme={theme}&page=comparison&recording={args.recording}")
-            wait_for_plots(driver, "#comparison-figure")
-            capture(driver, OUTPUT / f"comparison_patient_{theme}{args.suffix}.png", args.width)
-            driver.find_element(By.XPATH, "//label[normalize-space()='All patients']").click()
-            time.sleep(3.0)
-            capture(driver, OUTPUT / f"comparison_all_{theme}{args.suffix}.png", args.width)
+            wait_for_plots(driver, "#cmp-f1")
+            time.sleep(2.0)
+            capture(driver, OUTPUT / f"comparison_same_mode_{theme}{args.suffix}.png", args.width)
+            for label, name in (("Same algorithm, both modes", "same_algorithm"), ("All models", "all_models")):
+                driver.set_window_size(args.width, 900)
+                driver.execute_script("window.scrollTo(0, 0);")
+                driver.find_element(By.XPATH, f"//label[normalize-space()='{label}']").click()
+                time.sleep(4.0)
+                capture(driver, OUTPUT / f"comparison_{name}_{theme}{args.suffix}.png", args.width)
 
             for page in ("visualisation", "prediction"):
                 driver.set_window_size(args.width, 900)
@@ -103,6 +107,13 @@ def main() -> None:
                 time.sleep(2.0)
                 driver.execute_script("window.scrollTo(0, 0);")
                 capture(driver, OUTPUT / f"{page}_{theme}{args.suffix}.png", args.width)
+            # Prediction with the gray reference channels (ECG, EMG, SLI) switched on.
+            driver.set_window_size(args.width, 900)
+            # The switch can sit below the visible part of the sidebar, so click it from the page.
+            switch = driver.find_element(By.XPATH, "//label[normalize-space()='Reference channels (ECG, EMG, SLI)']")
+            driver.execute_script("arguments[0].click();", switch)
+            time.sleep(4.0)
+            capture(driver, OUTPUT / f"prediction_reference_{theme}{args.suffix}.png", args.width)
         for entry in driver.get_log("browser"):
             if entry["level"] == "SEVERE":
                 problems.append(entry["message"])

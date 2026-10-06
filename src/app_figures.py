@@ -155,8 +155,12 @@ def recording_figure(
     gain: float,
     view: tuple[float, float],
     theme: str,
+    references: dict[str, np.ndarray] | None = None,
 ) -> tuple[FigureResampler, dict]:
     """EEG rows + a bottom row sharing the time axis.
+
+    ``references`` are non-EEG channels (ECG, EMG, SLI) drawn in gray under the EEG rows for
+    orientation only: they are never model inputs.
 
     Without ``windows`` (visualisation) the bottom row is the real seizure curve only. With
     ``windows`` (prediction) it also shows the model probability, the threshold and detections.
@@ -177,7 +181,10 @@ def recording_figure(
     eeg_height = (row_pixels * len(rows) if stacked else 360)
     eeg_height = max(eeg_height, 200)
     gap = 26
-    plot_height = eeg_height + probability_height + gap + (event_height + 6 if has_strip else 0)
+    references = references or {}
+    reference_pixels, reference_gap = 46, 14
+    reference_height = reference_pixels * len(references) + (reference_gap if references else 0)
+    plot_height = eeg_height + reference_height + probability_height + gap + (event_height + 6 if has_strip else 0)
     # The top margin holds the toolbar and, below it, up to two legend rows.
     margin = {"l": 64, "r": 24, "t": 76, "b": 36}
     height = plot_height + margin["t"] + margin["b"]
@@ -214,7 +221,19 @@ def recording_figure(
             ),
         )
         eeg_axes.append(key)
-    probability_number = len(rows) + 2
+    reference_axes = {}
+    reference_top = top - fraction(eeg_height) - fraction(reference_gap)
+    for index, (name, values) in enumerate(references.items()):
+        number = len(rows) + index + 2
+        # Each reference channel has its own scale: their units differ and are not comparable to EEG.
+        scale = max(float(np.percentile(np.abs(values[::8]), 99.5)) * 1.3, 1e-6)
+        layout[f"yaxis{number}"] = axis_style(
+            theme, anchor="x", fixedrange=True, zeroline=False, showgrid=False, range=[-scale, scale],
+            domain=[reference_top - (index + 1) * fraction(reference_pixels) + fraction(3), reference_top - index * fraction(reference_pixels)],
+            tickvals=[0], ticktext=[name], tickfont={"family": MONO_FONT, "size": 11, "color": tokens["muted"]},
+        )
+        reference_axes[name] = f"y{number}"
+    probability_number = len(rows) + len(references) + 2
     probability_key = f"yaxis{probability_number}"
     probability_ref = f"y{probability_number}"
     layout[probability_key] = axis_style(
@@ -227,7 +246,7 @@ def recording_figure(
     )
     spikes = {"showspikes": True, "spikemode": "across", "spikesnap": "cursor", "spikethickness": 1, "spikedash": "dot", "spikecolor": tokens["muted"]}
     layout["xaxis"] = axis_style(
-        theme, range=list(view), matches="x2", showticklabels=False, anchor=f"y{len(rows) + 1}", showgrid=True, **spikes,
+        theme, range=list(view), matches="x2", showticklabels=False, anchor=f"y{len(rows) + len(references) + 1}", showgrid=True, **spikes,
     )
     layout["xaxis2"] = axis_style(
         theme, range=list(view), anchor=probability_ref, ticksuffix=" s", showgrid=True, **spikes,
@@ -279,6 +298,15 @@ def recording_figure(
                 ),
                 hf_x=time[inside], hf_y=signals[channel][inside],
             )
+    for index, (name, values) in enumerate(references.items()):
+        figure.add_trace(
+            go.Scatter(
+                name="Reference channel (not used by the model)", mode="lines", xaxis="x", yaxis=reference_axes[name],
+                legendgroup="reference", showlegend=index == 0, line={"color": tokens["muted"], "width": 1},
+                hovertemplate=f"<b>{name}</b> (reference)<br>%{{x:.3f}} s<br>%{{y:.1f}}<extra></extra>",
+            ),
+            hf_x=time, hf_y=values,
+        )
     label_x, label_y = label_curve(real, duration)
     figure.add_trace(
         go.Scatter(
@@ -303,6 +331,11 @@ def recording_figure(
         **base_layout(theme), **layout, height=height, margin=margin, hovermode="closest", dragmode="zoom",
         shapes=event_shapes(real, detected, threshold, probability_ref, theme), uirevision="eeg",
     )
+    if references:
+        figure.add_annotation(
+            x=1, xref="paper", xanchor="right", y=reference_top, yref="paper", yanchor="bottom", showarrow=False,
+            text="reference — not used by the model", font={"size": 10, "color": tokens["muted"]},
+        )
     description = {
         "probability_ref": probability_ref, "curve_channels": curve_channels, "height": height,
         "eeg_axes": eeg_axes, "full_scale": full_scale, "prediction": prediction,
@@ -328,14 +361,126 @@ def resampled_dict(figure: FigureResampler, view: tuple[float, float]) -> dict:
 
 # ----------------------------------------------------------------------------- comparison
 
+# One hue per algorithm; green (real seizures) and violet (threshold) stay reserved.
+ALGORITHM_COLORS = {
+    "dark": {"dt": "#C98500", "rf": "#3987E5", "knn": "#D55181", "svm": "#D95926"},
+    "light": {"dt": "#B7791F", "rf": "#2A78D6", "knn": "#D55181", "svm": "#D95926"},
+}
+
+
+def model_style(model: str, theme: str) -> dict:
+    """Color by algorithm; solid for unbalanced training, dashed / hatched for balanced."""
+    algorithm, mode = model.split("_")
+    balanced = mode == "balanced"
+    return {"color": ALGORITHM_COLORS[theme][algorithm], "dash": "dash" if balanced else "solid", "pattern": "/" if balanced else ""}
+
+
+def training_distribution_figure(rows: list[tuple[str, dict]], theme: str) -> go.Figure:
+    """Class shares of the training data for each training mode shown."""
+    tokens = THEMES[theme]
+    names = [name for name, _ in rows]
+    figure = go.Figure()
+    for column, label, color in [("class_0", "Class 0 — no seizure", rgba("#94A3B8", 0.55)), ("class_1", "Class 1 — seizure", REAL)]:
+        shares = [training[column] / training["windows"] for _, training in rows]
+        counts = [training[column] for _, training in rows]
+        figure.add_trace(
+            go.Bar(
+                y=names, x=shares, orientation="h", name=label, marker={"color": color, "line": {"width": 0}}, width=0.5,
+                text=[f"{share:.0%} · {count:,.0f} windows" for share, count in zip(shares, counts)], textposition="inside", insidetextanchor="middle",
+                textfont={"family": MONO_FONT, "size": 11, "color": tokens["text"]},
+                hovertemplate="<b>%{y}</b><br>" + label + ": %{x:.1%}<extra></extra>",
+            )
+        )
+    figure.update_layout(
+        **base_layout(theme), barmode="stack", height=70 * len(rows) + 90, margin={"l": 96, "r": 16, "t": 34, "b": 34}, hovermode="closest",
+        xaxis=axis_style(theme, tickformat=".0%", range=[0, 1], showgrid=False),
+        yaxis=axis_style(theme, showgrid=False, autorange="reversed", tickfont={"size": 12, "color": tokens["text"]}),
+    )
+    return figure
+
+
+def confusion_figure(models: list[tuple[str, str, dict]], theme: str) -> go.Figure:
+    """Window-level confusion matrix of each model at its best threshold: counts and share of the true class."""
+    tokens = THEMES[theme]
+    columns = min(4, len(models))
+    rows = int(np.ceil(len(models) / columns))
+    figure = go.Figure()
+    layout, annotations = {}, []
+    gap_x, gap_y = 0.05, 0.36 / rows
+    width = (1 - gap_x * (columns - 1)) / columns
+    height = (1 - gap_y * (rows - 1)) / rows
+    scale = [[0, rgba("#3B82F6", 0.06)], [1, rgba("#3B82F6", 0.85 if theme == "dark" else 0.7)]]
+    for index, (key, label, window) in enumerate(models):
+        row, column = divmod(index, columns)
+        suffix = "" if index == 0 else str(index + 1)
+        left = column * (width + gap_x)
+        top = 1 - row * (height + gap_y)
+        matrix = np.array([[window["tn"], window["fp"]], [window["fn"], window["tp"]]], dtype=float)
+        share = matrix / matrix.sum(axis=1, keepdims=True)
+        layout[f"xaxis{suffix}"] = axis_style(theme, domain=[left, min(1.0, left + width)], anchor=f"y{suffix}", showgrid=False, side="bottom", fixedrange=True, tickangle=0)
+        layout[f"yaxis{suffix}"] = axis_style(theme, domain=[max(0.0, top - height), top], anchor=f"x{suffix}", showgrid=False, autorange="reversed", fixedrange=True, showticklabels=column == 0)
+        figure.add_trace(
+            go.Heatmap(
+                z=share, x=["Pred. 0", "Pred. 1"], y=["True 0", "True 1"], xaxis=f"x{suffix}", yaxis=f"y{suffix}",
+                colorscale=scale, zmin=0, zmax=1, showscale=False, xgap=3, ygap=3,
+                text=[[f"{int(matrix[i, j]):,}<br>{share[i, j]:.1%}" for j in range(2)] for i in range(2)], texttemplate="%{text}",
+                textfont={"family": MONO_FONT, "size": 12, "color": tokens["text"]},
+                hovertemplate=f"<b>{label}</b><br>%{{y}}, %{{x}}<br>%{{text}}<extra></extra>",
+            )
+        )
+        annotations.append(
+            {
+                "x": left + width / 2, "xref": "paper", "y": top, "yref": "paper", "yanchor": "bottom", "showarrow": False,
+                # Algorithm and training mode on two lines, so neighbouring titles never touch.
+                "text": label.replace(" · ", "<br>"), "font": {"size": 11, "color": tokens["text"]},
+            }
+        )
+    figure.update_layout(**base_layout(theme), **layout, annotations=annotations, height=250 * rows + 50, margin={"l": 56, "r": 12, "t": 46, "b": 34})
+    return figure
+
+
+def curves_figure(curves: dict[str, tuple[str, pd.DataFrame, tuple[float, float]]], x: str, y: str, x_title: str, y_title: str, theme: str) -> go.Figure:
+    """Shared chart with one line per model and a marker at each model's best threshold.
+
+    ``curves`` maps a model key to (label, data frame, (x, y) of the best-threshold point).
+    """
+    tokens = THEMES[theme]
+    figure = go.Figure()
+    for key, (label, frame, point) in curves.items():
+        style = model_style(key, theme)
+        figure.add_trace(
+            go.Scatter(
+                x=frame[x], y=frame[y], mode="lines", name=label, legendgroup=key,
+                line={"color": style["color"], "width": 2, "dash": style["dash"]}, customdata=frame["threshold"],
+                hovertemplate=f"<b>{label}</b><br>threshold %{{customdata:.2f}}<br>{x_title}: %{{x:.2f}}<br>{y_title}: %{{y:.2f}}<extra></extra>",
+            )
+        )
+        figure.add_trace(
+            go.Scatter(
+                x=[point[0]], y=[point[1]], mode="markers", legendgroup=key, showlegend=False,
+                marker={"color": style["color"], "size": 10, "symbol": "circle", "line": {"color": tokens["panel"], "width": 2}},
+                hovertemplate=f"<b>{label}</b><br>best threshold<br>{x_title}: %{{x:.2f}}<br>{y_title}: %{{y:.2f}}<extra></extra>",
+            )
+        )
+    layout = base_layout(theme)
+    layout["legend"] = {**layout["legend"], "orientation": "h", "y": -0.22, "yanchor": "top", "font": {"size": 11, "color": tokens["text"]}}
+    figure.update_layout(
+        **layout, height=380, margin={"l": 56, "r": 16, "t": 16, "b": 40}, hovermode="closest",
+        xaxis=axis_style(theme, title={"text": x_title, "font": {"size": 12, "color": tokens["muted"]}}, range=[0, 1.02]),
+        yaxis=axis_style(theme, title={"text": y_title, "font": {"size": 12, "color": tokens["muted"]}}, range=[0, 1.05]),
+    )
+    return figure
+
 
 def patient_comparison_figure(recording: str, duration: float, real: pd.DataFrame, results: dict[str, tuple], theme: str) -> go.Figure:
     """One patient: the real seizures on the first row, then one row of detections per model.
 
-    ``results`` maps a model name to (detected intervals, event matches, metrics, threshold).
+    ``results`` maps a model key to (row label, detected intervals, event matches, metrics).
+    Detections outside every real seizure (false alarms) are drawn faded.
     """
     tokens = THEMES[theme]
-    rows = ["Real seizures", *results]
+    labels = {key: value[0] for key, value in results.items()}
+    rows = ["Real seizures", *labels.values()]
     position = {name: len(rows) - 1 - index for index, name in enumerate(rows)}
     figure = go.Figure()
     figure.add_trace(
@@ -345,7 +490,7 @@ def patient_comparison_figure(recording: str, duration: float, real: pd.DataFram
         )
     )
 
-    def lane(frame: pd.DataFrame, row: str, name: str, color: str, group: str, show: bool, pattern: str = "") -> None:
+    def lane(frame: pd.DataFrame, row: str, name: str, color: str, pattern: str = "", opacity: float = 1.0) -> None:
         if frame.empty:
             return
         custom = np.stack([frame["start_s"], frame["end_s"]], axis=1)
@@ -354,34 +499,30 @@ def patient_comparison_figure(recording: str, duration: float, real: pd.DataFram
         figure.add_trace(
             go.Bar(
                 y=y, x=(frame["end_s"] - frame["start_s"]).to_numpy(), base=frame["start_s"], orientation="h", width=0.5,
-                name=name, legendgroup=group, showlegend=show, customdata=custom, hovertemplate=hover,
+                showlegend=False, customdata=custom, hovertemplate=hover, opacity=opacity,
                 marker={"color": color, "line": {"width": 0}, "pattern": {"shape": pattern, "fgcolor": tokens["panel"], "size": 5}},
             )
         )
         # Tick markers keep short events visible when the bar is narrower than a pixel.
         figure.add_trace(
             go.Scatter(
-                x=(frame["start_s"] + frame["end_s"]) / 2, y=y, mode="markers", legendgroup=group, showlegend=False,
+                x=(frame["start_s"] + frame["end_s"]) / 2, y=y, mode="markers", showlegend=False, opacity=opacity,
                 marker={"symbol": "line-ns", "size": 16, "line": {"color": color, "width": 2}}, customdata=custom, hovertemplate=hover,
             )
         )
 
-    lane(real, "Real seizures", "Real seizure (annotation)", REAL, "real", True)
-    shown_true = shown_false = False
-    notes = []
-    for model, (detected, matches, metrics, threshold) in results.items():
+    lane(real, "Real seizures", "Real seizure (annotation)", REAL)
+    notes = [("Real seizures", f"{len(real)} annotated")]
+    for key, (label, detected, matches, metrics) in results.items():
+        style = model_style(key, theme)
         false_starts = set(matches.loc[matches["status"] == "FP", "detected_start_s"])
         is_false = detected["start_s"].isin(false_starts) if len(detected) else pd.Series(dtype=bool)
-        lane(detected.loc[~is_false], model, "Detection on a real seizure", DETECTED, "true", not shown_true)
-        shown_true = shown_true or bool((~is_false).any())
-        lane(detected.loc[is_false], model, "False alarm", rgba(DETECTED, 0.55), "false", not shown_false, pattern="/")
-        shown_false = shown_false or bool(is_false.any())
-        total = metrics["tp"] + metrics["fn"]
-        notes.append((model, f"{metrics['tp']}/{total} found · {metrics['fp']} false"))
-    notes.append(("Real seizures", f"{len(real)} annotated"))
+        lane(detected.loc[~is_false], label, "Detection on a real seizure", style["color"], style["pattern"])
+        lane(detected.loc[is_false], label, "False alarm", style["color"], style["pattern"], opacity=0.4)
+        notes.append((label, f"{metrics['tp']}/{metrics['tp'] + metrics['fn']} found · {metrics['fp']} false"))
     figure.update_layout(
-        **base_layout(theme), barmode="overlay", height=62 * len(rows) + 130, margin={"l": 120, "r": 150, "t": 56, "b": 48},
-        hovermode="closest", bargap=0,
+        **base_layout(theme), barmode="overlay", height=46 * len(rows) + 100, margin={"l": 150, "r": 150, "t": 16, "b": 48},
+        hovermode="closest", bargap=0, showlegend=False,
         annotations=[
             {
                 "x": 1.0, "xref": "paper", "xanchor": "left", "y": position[row], "yref": "y", "showarrow": False, "xshift": 8,
@@ -395,37 +536,6 @@ def patient_comparison_figure(recording: str, duration: float, real: pd.DataFram
             range=[-0.6, len(rows) - 0.4], fixedrange=True, tickfont={"size": 12, "color": tokens["text"]},
         ),
     )
-    return figure
-
-
-def models_bar_figure(comparison: pd.DataFrame, theme: str) -> go.Figure:
-    """All patients: event-level F1, recall and precision of every model, one panel per score."""
-    tokens = THEMES[theme]
-    scores = [("event_f1", "Event F1"), ("event_recall", "Recall"), ("event_precision", "Precision")]
-    color = tokens["regions"]["central"]
-    figure = go.Figure()
-    layout = {}
-    for index, (column, title) in enumerate(scores):
-        suffix = "" if index == 0 else str(index + 1)
-        left = index / len(scores) + (0.035 if index else 0)
-        layout[f"xaxis{suffix}"] = axis_style(theme, domain=[left, (index + 1) / len(scores) - 0.035], anchor=f"y{suffix}", showgrid=False, tickangle=0, tickfont={"size": 11, "color": tokens["text"]})
-        layout[f"yaxis{suffix}"] = axis_style(theme, anchor=f"x{suffix}", range=[0, 1.12], tickformat=".0%", tickvals=[0, 0.5, 1], fixedrange=True)
-        figure.add_trace(
-            go.Bar(
-                # Two-line names keep the labels apart on narrow screens.
-                x=[name.replace(" ", "<br>") for name in comparison["model"]], y=comparison[column],
-                xaxis=f"x{suffix}", yaxis=f"y{suffix}", width=0.55, showlegend=False,
-                marker={"color": color, "line": {"width": 0}, "cornerradius": 4},
-                text=[f"{value:.0%}" if column != "event_f1" else f"{value:.2f}" for value in comparison[column]],
-                textposition="outside", textfont={"family": MONO_FONT, "size": 12, "color": tokens["text"]}, cliponaxis=False,
-                hovertemplate=f"<b>%{{x}}</b><br>{title}: %{{y:.2f}}<extra></extra>",
-            )
-        )
-        figure.add_annotation(
-            x=(left + (index + 1) / len(scores) - 0.035) / 2, xref="paper", y=1.0, yref="paper", yanchor="bottom", showarrow=False,
-            text=title, font={"size": 13, "color": tokens["text"]},
-        )
-    figure.update_layout(**base_layout(theme), **layout, height=320, margin={"l": 48, "r": 16, "t": 40, "b": 56}, hovermode="closest")
     return figure
 
 

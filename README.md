@@ -62,18 +62,22 @@ python scripts/train_models.py                                               # d
 
 `--skip-conversion` reuses the labeled per-recording Parquet files after checking their labels against the current annotations. Reports: [`docs/DATASET_PARTS_I_VI_OFFICIAL.md`](docs/DATASET_PARTS_I_VI_OFFICIAL.md), [`docs/PART_VII_ANALYSIS_OFFICIAL.md`](docs/PART_VII_ANALYSIS_OFFICIAL.md), [`docs/PARTS_VIII_IX.md`](docs/PARTS_VIII_IX.md).
 
-Temporal detection (Parts X–XI): out-of-fold probabilities, the final model, intervals and error analysis:
+Temporal detection (Parts X–XI, Random Forest) and the 8 selectable models:
 
 ```bash
-python scripts/predict_oof.py          # out-of-fold predictions (RF + all four models), model_comparison.csv, models/rf_final.joblib
-python scripts/prepare_app_data.py     # filtered signals, recording metadata, technician events (data/processed/app/)
-python scripts/evaluate_detection.py   # threshold, outputs/detected_intervals.csv, figures, docs/PARTS_X_XI.md
-python scripts/detect.py --recording 190304A_E [--threshold 0.5]
+python scripts/predict_oof.py          # Part X: out-of-fold Random Forest predictions, models/rf_final.joblib
+python scripts/train_registry.py       # 8 models = DT, RF, KNN, SVM x unbalanced, balanced (about 25 minutes)
+python scripts/prepare_app_data.py     # filtered signals, reference channels, metadata, technician events, comparison curves
+python scripts/evaluate_detection.py   # Part X-XI: threshold, outputs/detected_intervals.csv, figures, docs/PARTS_X_XI.md
+python scripts/compare_models.py       # docs/MODEL_COMPARISON.md
+python scripts/detect.py --recording 190304A_E [--algo dt|rf|knn|svm] [--mode unbalanced|balanced] [--threshold 0.5]
 ```
+
+`train_registry.py` writes `outputs/predictions/<algo>_<mode>.parquet` (out-of-fold probabilities, GroupKFold by recording), `models/<algo>_<mode>.joblib` (final models on all 21 recordings) and `models/registry.json` (features, best threshold and scores of each model, default model). Balanced training undersamples the training folds only (all seizure windows + as many normal windows, 5 seeds); test data always keeps the real proportions. The model files are not in git (the KNN one is 72 MB): rebuild them with the script.
 
 ## How to run the app
 
-The app only reads precomputed files, so run the three commands above once (after `build_dataset.py --annotations official`), then:
+The app only reads precomputed files, so run `train_registry.py` and `prepare_app_data.py` once (after `build_dataset.py --annotations official`), then:
 
 ```bash
 pip install -r requirements.txt
@@ -85,8 +89,9 @@ Open <http://127.0.0.1:8050>. Nothing is trained at startup. If a precomputed fi
 The app has three parts, chosen in the header, and one patient selector in the sidebar:
 
 - **Visualisation**: the data only. Choose the patient and which of the 19 channels to show (the list is grouped by scalp region; remove a channel with its ×, "Show all" brings them all back; stacked in 10-20 order or overlaid). Each curve turns green during a real seizure, a diamond marks each seizure start, and the bottom curve is 1 during a seizure and 0 otherwise. A table lists the real seizures.
-- **Prediction**: choose one of the four trained models (Decision Tree, Random Forest, KNN, SVM) and see its probability, its detections against the real seizures, a verdict for this patient (found, missed, false alarms) and the table of real vs predicted intervals. The threshold slider updates everything live; each model starts at its own best threshold.
-- **Comparison**: the four models together, with no model to choose. "Selected patient" shows, for the patient in the sidebar, a table (seizures found, missed, false alarms, scores) and a timeline with the real seizures on the first row and one row of detections per model. "All patients" shows the overall scores, a bar chart of F1, recall and precision, and a table of every patient against every model.
+- **Prediction**: the model chosen in the header (Algorithm: DT / RF / KNN / SVM, Training mode: Unbalanced / Balanced; a badge shows the active model). You see its probability, its detections against the real seizures, a verdict for this patient, its scores on all patients and the table of real vs predicted intervals. Each model starts at its own best threshold; the slider updates everything live.
+- **Comparison**: "Same training mode" compares the 4 algorithms within Unbalanced or Balanced; "Same algorithm, both modes" compares unbalanced with balanced for one algorithm; "All models" shows the 8; the model list can be edited for any custom subset. For the chosen models: summary cards, a sortable ranking with the best values highlighted, event F1 against the threshold, precision-recall curves, the training class distribution, confusion matrices, a timeline of the selected patient (real seizures + one row per model) and event F1 per patient. One color per algorithm; solid = unbalanced, dashed or hatched = balanced.
+- Reference channels: the "Reference channels (ECG, EMG, SLI)" switch draws them in gray under the EEG, labeled "reference — not used by the model". They are never features. EMG exists in 6 recordings; a constant SLI channel is not drawn.
 - Common controls: page length, gain, page buttons or the ← → keys, jump to previous/next seizure, technician notes, the spectrum of any clicked 2 s window, "Save view as PNG" and "Download intervals CSV".
 - The sun/moon button switches between the dark and light themes; `?theme=light&page=prediction&recording=211104B_D` in the URL opens a given state directly.
 

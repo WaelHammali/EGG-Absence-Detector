@@ -15,6 +15,7 @@ from sklearn.metrics import confusion_matrix
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from src.context import hpn_periods
 from src.detection import MIN_DURATION_S, MIN_GAP_S, detect_all, event_metrics, sweep_thresholds
 
 
@@ -243,9 +244,9 @@ def nearby_notes(matches: pd.DataFrame, events: pd.DataFrame, status: str, margi
 
 
 def in_hpn(events: pd.DataFrame, recording: str, time_s: float) -> bool:
-    """True when ``time_s`` falls between the first and last HPN marker of the recording (+60 s)."""
-    hpn = events.loc[(events.recording == recording) & (events.category == "HPN"), "time_s"]
-    return bool(len(hpn)) and hpn.min() <= time_s <= hpn.max() + 60
+    """True when ``time_s`` falls in a hyperventilation period of the recording (or the minute after)."""
+    periods = hpn_periods(events.loc[events.recording == recording])
+    return any(start <= time_s <= end for start, end in periods)
 
 
 def write_report(

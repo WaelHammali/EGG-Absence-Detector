@@ -9,6 +9,7 @@ from collections import OrderedDict
 from pathlib import Path
 from urllib.parse import parse_qs
 import sys
+import traceback
 import uuid
 
 import dash
@@ -22,8 +23,8 @@ sys.path.insert(0, str(ROOT))
 
 from src import app_data
 from src.app_figures import (
-    DETECTED, EVENT, REAL, THRESHOLD, event_shapes, message_figure, models_bar_figure, patient_comparison_figure, recording_figure,
-    resampled_dict, spectrum_figure, view_relayout,
+    DETECTED, EVENT, REAL, THRESHOLD, confusion_figure, curves_figure, event_shapes, message_figure, model_style,
+    patient_comparison_figure, recording_figure, resampled_dict, spectrum_figure, training_distribution_figure, view_relayout,
 )
 from src.io import CHANNELS
 
@@ -42,6 +43,22 @@ CHANNEL_GROUPS = [
 ]
 GREEK = {"Delta": "δ", "Theta": "θ", "Alpha": "α", "Beta": "β"}
 # URL values for ?page=…, including the names used before the app was split in three parts.
+# Ranking columns: label, whether higher is better, formatter.
+RANKING = {
+    "event_f1": ("Event F1", True, lambda value: f"{value:.3f}"),
+    "event_recall": ("Event recall", True, lambda value: f"{value:.0%}"),
+    "event_precision": ("Event precision", True, lambda value: f"{value:.0%}"),
+    "found": ("Found", True, lambda value: f"{int(value)}"),
+    "missed": ("Missed", False, lambda value: f"{int(value)}"),
+    "false_alarms": ("False alarms", False, lambda value: f"{int(value)}"),
+    "false_alarms_per_hour": ("FA / hour", False, lambda value: f"{value:.1f}"),
+    "window_f1": ("Window F1", True, lambda value: f"{value:.3f}"),
+    "window_recall": ("Window recall", True, lambda value: f"{value:.0%}"),
+    "window_precision": ("Window precision", True, lambda value: f"{value:.0%}"),
+    "onset_error": ("Onset error (s)", False, lambda value: f"{value:+.2f}"),
+    "offset_error": ("Offset error (s)", False, lambda value: f"{value:+.2f}"),
+    "fit_seconds": ("Training (s/fold)", False, lambda value: f"{value:.2f}"),
+}
 PAGES = {
     "visualisation": "visualisation", "prediction": "prediction", "comparison": "comparison",
     "recording": "prediction", "overview": "comparison",
@@ -143,7 +160,7 @@ def header():
                         dmc.Stack(
                             [
                                 dmc.Text("EEG Absence Detector", fw=700, size="lg", lh=1.1),
-                                dmc.Text("Visualise the EEG, test a model on a patient, compare models", size="xs", c="dimmed", visibleFrom="md"),
+                                dmc.Text("Visualise the EEG, test a model on a patient, compare models", size="xs", c="dimmed", visibleFrom="xl"),
                             ],
                             gap=0,
                         ),
@@ -163,6 +180,21 @@ def header():
                                 ],
                             ),
                         ),
+                        tip(
+                            "Algorithm of the model used in Prediction.",
+                            dmc.SegmentedControl(
+                                id="algo", value=DATA.default_model.split("_")[0], radius="md", size="xs",
+                                data=[{"value": key, "label": label} for key, label in app_data.ALGORITHM_SHORT.items()],
+                            ),
+                        ),
+                        tip(
+                            "Training mode: Unbalanced trains on the real class proportions (about 96 % / 4 %); Balanced trains on as many normal windows as seizure windows (50 / 50).",
+                            dmc.SegmentedControl(
+                                id="train-mode", value=DATA.default_model.split("_")[1], radius="md", size="xs",
+                                data=[{"value": key, "label": label} for key, label in app_data.MODES.items()],
+                            ),
+                        ),
+                        html.Div(id="active-model"),
                         tip(
                             "Toggle between the dark monitor theme and a light theme suited to report screenshots.",
                             dmc.ActionIcon(icon("tabler:sun", 20), id="theme-toggle", variant="default", size="lg", radius="md", **{"aria-label": "Toggle color scheme"}),
@@ -200,15 +232,6 @@ def sidebar():
                             [
                                 dmc.Divider(),
                                 section("Prediction"),
-                                wide_tip(
-                                    "Model used to predict the seizures. Every model is tested on patients it never saw during training.",
-                                    html.Div(
-                                        dmc.Select(
-                                            id="model", data=DATA.models, value=app_data.DEFAULT_MODEL, allowDeselect=False,
-                                            leftSection=icon("tabler:cpu", 16), comboboxProps={"withinPortal": True},
-                                        )
-                                    ),
-                                ),
                             dmc.Stack(
                                 [
                                     dmc.Group(
@@ -230,7 +253,7 @@ def sidebar():
                                     wide_tip(
                                         "A window counts as seizure when its probability reaches this value; detections and metrics update live.",                                html.Div(
                                             dmc.Slider(
-                                                id="threshold", min=0.05, max=0.95, step=0.01, value=DATA.best_threshold(app_data.DEFAULT_MODEL), color="violet",
+                                                id="threshold", min=0.05, max=0.99, step=0.01, value=DATA.best_threshold(DATA.default_model), color="violet",
                                                 updatemode="mouseup", precision=2,
                                                 marks=[{"value": 0.25, "label": "0.25"}, {"value": 0.5, "label": "0.50"}, {"value": 0.75, "label": "0.75"}],
                                             ),
@@ -305,6 +328,10 @@ def sidebar():
                                     "Show the technician's notes from the recording header (HPN, SLI, eyes open/closed, artifacts, movements).",
                                     html.Div(dmc.Switch(id="events", checked=True, label="Technician events", color="yellow")),
                                 ),
+                                tip(
+                                    "Show ECG, EMG and SLI in gray under the EEG. They are reference traces only: no model uses them. EMG exists in 6 recordings; a constant SLI is not drawn.",
+                                    html.Div(dmc.Switch(id="reference", checked=False, label="Reference channels (ECG, EMG, SLI)", color="gray")),
+                                ),
                             ],
                             gap="md",
                         ),
@@ -331,6 +358,14 @@ def sidebar():
 
 
 def comparison_page():
+    model_options = [
+        {"group": name, "items": [{"value": f"{key}_{mode}", "label": DATA.label(f"{key}_{mode}", short=True)} for mode in app_data.MODES]}
+        for key, name in app_data.ALGORITHMS.items()
+    ]
+    graph = lambda identifier: dcc.Loading(
+        dcc.Graph(id=identifier, config={"displaylogo": False, "displayModeBar": False}),
+        delay_show=300, overlay_style={"visibility": "visible", "opacity": 0.5}, type="dot",
+    )
     return html.Div(
         dmc.Stack(
             [
@@ -340,34 +375,144 @@ def comparison_page():
                             [
                                 dmc.Stack(
                                     [
-                                        dmc.Text("Comparison of the four models", fw=600),
-                                        dmc.Text(id="comparison-caption", size="sm", c="dimmed"),
+                                        dmc.Text("Models to compare", fw=600),
+                                        dmc.Text(
+                                            "Each model at its own best threshold, tested on patients it never saw during training. One color per algorithm; solid = unbalanced, dashed or hatched = balanced.",
+                                            size="sm", c="dimmed",
+                                        ),
                                     ],
                                     gap=0,
                                 ),
-                                tip(
-                                    "Compare the models on the patient chosen in the sidebar, or on all patients together.",
-                                    dmc.SegmentedControl(
-                                        id="scope", value="patient", radius="md",
-                                        data=[{"value": "patient", "label": "Selected patient"}, {"value": "all", "label": "All patients"}],
-                                    ),
-                                ),
+                                dmc.Badge("Out-of-fold predictions", variant="light", color="gray", leftSection=icon("tabler:shield-check", 12)),
                             ],
                             justify="space-between", align="flex-start", mb="sm",
                         ),
-                        html.Div(id="model-table"),
-                    ]
-                ),
-                panel(
-                    [
-                        html.Div(id="comparison-figure-title"),
-                        dcc.Loading(
-                            dcc.Graph(id="comparison-figure", config={"displaylogo": False, "modeBarButtonsToRemove": ["select2d", "lasso2d"]}),
-                            delay_show=300, overlay_style={"visibility": "visible", "opacity": 0.5}, type="dot",
+                        dmc.Group(
+                            [
+                                tip(
+                                    "Same training mode compares the 4 algorithms; Same algorithm compares unbalanced with balanced; All models shows the 8; Custom keeps the list you edit.",
+                                    dmc.SegmentedControl(
+                                        id="cmp-preset", value="mode", radius="md",
+                                        data=[
+                                            {"value": "mode", "label": "Same training mode"},
+                                            {"value": "algorithm", "label": "Same algorithm, both modes"},
+                                            {"value": "all", "label": "All models"},
+                                            {"value": "custom", "label": "Custom"},
+                                        ],
+                                    ),
+                                ),
+                                html.Div(
+                                    tip(
+                                        "Training mode whose 4 algorithms are compared.",
+                                        dmc.SegmentedControl(
+                                            id="cmp-training", value="unbalanced", radius="md",
+                                            data=[{"value": key, "label": label} for key, label in app_data.MODES.items()],
+                                        ),
+                                    ),
+                                    id="cmp-training-box",
+                                ),
+                                html.Div(
+                                    tip(
+                                        "Algorithm whose two training modes are compared.",
+                                        dmc.SegmentedControl(
+                                            id="cmp-algo", value="rf", radius="md",
+                                            data=[{"value": key, "label": label} for key, label in app_data.ALGORITHM_SHORT.items()],
+                                        ),
+                                    ),
+                                    id="cmp-algo-box", style={"display": "none"},
+                                ),
+                            ],
+                            gap="sm",
+                        ),
+                        wide_tip(
+                            "Models shown below. Add or remove any model to build your own comparison.",
+                            html.Div(
+                                dmc.MultiSelect(
+                                    id="cmp-models", data=model_options, value=[f"{key}_unbalanced" for key in app_data.ALGORITHMS],
+                                    clearable=False, mt="sm", leftSection=icon("tabler:cpu", 16), comboboxProps={"withinPortal": True}, maxDropdownHeight=360,
+                                )
+                            ),
                         ),
                     ]
                 ),
-                html.Div(id="comparison-extra"),
+                html.Div(id="cmp-empty"),
+                html.Div(
+                    dmc.Stack(
+                        [
+                            dmc.SimpleGrid(id="cmp-cards", cols={"base": 1, "sm": 2, "xl": 4}, spacing="md"),
+                            panel(
+                                [
+                                    dmc.Group(
+                                        [
+                                            dmc.Stack(
+                                                [
+                                                    dmc.Text("Ranking", fw=600),
+                                                    dmc.Text("All patients together. The best value of each column is highlighted.", size="sm", c="dimmed"),
+                                                ],
+                                                gap=0,
+                                            ),
+                                            tip(
+                                                "Column used to sort the ranking; scores sort from highest, errors and false alarms from lowest.",
+                                                html.Div(
+                                                    dmc.Select(
+                                                        id="cmp-sort", value="event_f1", allowDeselect=False, w=230, leftSection=icon("tabler:arrows-sort", 16),
+                                                        data=[{"value": key, "label": f"Sort by {label}"} for key, (label, *_rest) in RANKING.items()],
+                                                        comboboxProps={"withinPortal": True},
+                                                    )
+                                                ),
+                                            ),
+                                        ],
+                                        justify="space-between", align="flex-start", mb="xs",
+                                    ),
+                                    html.Div(id="cmp-ranking"),
+                                ]
+                            ),
+                            dmc.Grid(
+                                [
+                                    dmc.GridCol(
+                                        panel(
+                                            [card_title("Event F1 against the threshold", "dot = best threshold of each model"), graph("cmp-f1")], h="100%",
+                                        ),
+                                        span={"base": 12, "lg": 6},
+                                    ),
+                                    dmc.GridCol(
+                                        panel(
+                                            [card_title("Precision–recall curves", "per 2 s window; dot = best threshold"), graph("cmp-pr")], h="100%",
+                                        ),
+                                        span={"base": 12, "lg": 6},
+                                    ),
+                                ],
+                                gutter="md",
+                            ),
+                            dmc.Grid(
+                                [
+                                    dmc.GridCol(
+                                        panel(
+                                            [card_title("Training data of each mode", "average of the 5 training folds"), graph("cmp-distribution")], h="100%",
+                                        ),
+                                        span={"base": 12, "lg": 5},
+                                    ),
+                                    dmc.GridCol(
+                                        panel(
+                                            [card_title("Confusion matrices", "2 s windows at each model's best threshold; % of the true class"), graph("cmp-confusion")], h="100%",
+                                        ),
+                                        span={"base": 12, "lg": 7},
+                                    ),
+                                ],
+                                gutter="md",
+                            ),
+                            panel([html.Div(id="cmp-timeline-title"), graph("cmp-timeline")]),
+                            panel(
+                                [
+                                    card_title("Event F1 per patient", "found / real seizures · false alarms; best of each row highlighted; selected patient marked"),
+                                    html.Div(id="cmp-patients"),
+                                ]
+                            ),
+                        ],
+                        gap="md",
+                    ),
+                    id="cmp-body",
+                ),
             ],
             gap="md",
         ),
@@ -381,6 +526,7 @@ def recording_page():
         dmc.Stack(
             [
                 panel([html.Div(id="recording-info"), html.Div(id="verdict")]),
+                html.Div(id="model-overview"),
                 panel(
                     [
                         dmc.Group(
@@ -473,6 +619,7 @@ def layout():
             dcc.Location(id="url"),
             dcc.Store(id="session", data=uuid.uuid4().hex),
             dcc.Store(id="theme", data="dark"),
+            dcc.Store(id="model", data=DATA.default_model),
             dcc.Store(id="view"),
             dcc.Store(id="figure-meta"),
             dcc.Store(id="spectrum-point"),
@@ -498,7 +645,8 @@ def layout():
 
 
 def on_error(error: Exception):
-    """Show a friendly message instead of a traceback."""
+    """Show a friendly message in the page; the full traceback goes to the terminal."""
+    traceback.print_exception(error)
     message = str(error) if isinstance(error, app_data.MissingData) else "The last action could not be completed. Check the terminal for details and try again."
     dash.set_props("error", {"children": message, "hide": False})
 
@@ -545,13 +693,27 @@ def show_page(page):
     return hidden, shown, shown, (shown if page == "prediction" else hidden)
 
 
+@app.callback(Output("model", "data"), Output("active-model", "children"), Input("algo", "value"), Input("train-mode", "value"), Input("theme", "data"))
+def choose_model(algorithm, mode, theme):
+    model = f"{algorithm}_{mode}"
+    style = model_style(model, theme)
+    badge = tip(
+        "Model currently used in Prediction. Line style in Comparison: solid = unbalanced, dashed = balanced.",
+        dmc.Badge(
+            DATA.label(model), variant="light", color="gray", radius="md", size="lg", tt="none", visibleFrom="lg",
+            leftSection=html.Span(style={"display": "inline-block", "width": 14, "borderTop": f"3px {'dashed' if mode == 'balanced' else 'solid'} {style['color']}"}),
+        ),
+    )
+    return model, badge
+
+
 @app.callback(Output("threshold-value", "children"), Input("threshold", "value"))
 def threshold_label(threshold):
     return f"{threshold:.2f}"
 
 
 @app.callback(
-    Output("threshold", "value"), Input("model", "value"), Input("threshold-reset", "n_clicks"),
+    Output("threshold", "value"), Input("model", "data"), Input("threshold-reset", "n_clicks"),
     prevent_initial_call=True,
 )
 def model_threshold(model, _):
@@ -567,35 +729,8 @@ def show_all_channels(_):
 # ----------------------------------------------------------------------------- overview
 
 
-def data_table(head: list[str], rows: list[list], min_width: int, highlight: int | None = None, max_height: int | None = None):
-    body = [
-        dmc.TableTr(
-            [dmc.TableTd(cell, className="" if index == 0 else "mono", style={"whiteSpace": "nowrap"}) for index, cell in enumerate(cells)],
-            **({"bg": "var(--mantine-color-teal-light)"} if number == highlight else {}),
-        )
-        for number, cells in enumerate(rows)
-    ]
-    return dmc.TableScrollContainer(
-        dmc.Table(
-            [dmc.TableThead(dmc.TableTr([dmc.TableTh(name, style={"whiteSpace": "nowrap"}) for name in head])), dmc.TableTbody(body)],
-            striped=highlight is None, highlightOnHover=True, verticalSpacing=8, fz="sm", stickyHeader=max_height is not None,
-        ),
-        minWidth=min_width, type="native", **({"mah": max_height} if max_height else {}),
-    )
-
-
-def model_name(model: str, best: bool):
-    name = [dmc.Text(model, fw=600, size="sm", span=True, style={"whiteSpace": "nowrap"})]
-    if best:
-        name.append(dmc.Badge("Best", size="xs", variant="light", color="violet", ml=6))
-    return name
-
-
 def percent(value) -> str:
     return "—" if pd.isna(value) else f"{value:.0%}"
-
-
-SHORT_VERDICT = {"Predicts well": "Well", "Partly correct": "Partly", "Predicts poorly": "Poorly"}
 
 
 def verdict_label(metrics: dict) -> tuple[str, str, str]:
@@ -608,66 +743,189 @@ def verdict_label(metrics: dict) -> tuple[str, str, str]:
     return "Partly correct", "yellow", "tabler:alert-circle"
 
 
-@app.callback(
-    Output("comparison-caption", "children"), Output("model-table", "children"), Output("comparison-figure-title", "children"),
-    Output("comparison-figure", "figure"), Output("comparison-extra", "children"),
-    Input("scope", "value"), Input("recording", "value"), Input("theme", "data"),
-)
-def comparison(scope, recording, theme):
-    models = DATA.comparison
-    note = "Each model uses its own best threshold and is tested on patients it never saw during training."
-    if scope == "patient":
-        results = {}
-        for row in models.itertuples(index=False):
-            detected, matches, metrics = DATA.detect(recording, row.threshold, row.model)
-            results[row.model] = (detected, matches, metrics, row.threshold)
-        # Best on this patient: most seizures found, then fewest false alarms.
-        rank = lambda name: (results[name][2]["tp"], -results[name][2]["fp"])
-        top = max(rank(name) for name in results)
-        rows = []
-        for model, (_, _, metrics, threshold) in results.items():
-            label, color, icon_name = verdict_label(metrics)
-            window = metrics["window"]
-            rows.append(
-                [
-                    model_name(model, rank(model) == top), f"{threshold:.2f}",
-                    dmc.Badge(SHORT_VERDICT[label], color=color, variant="light", leftSection=icon(icon_name, 12), miw=84, style={"flexShrink": 0}),
-                    f"{metrics['tp']} / {metrics['tp'] + metrics['fn']}", str(metrics["fn"]), str(metrics["fp"]),
-                    f"{metrics['f1']:.2f}", percent(window["recall"]), percent(window["precision"]),
-                ]
-            )
-        head = ["Model", "Threshold", "Prediction", "Seizures found", "Missed", "False alarms", "Event F1", "Window recall", "Window precision"]
-        info = DATA.info(recording)
-        title = card_title(f"Real seizures and detections of each model — {recording}", "hatched = false alarm")
-        figure = patient_comparison_figure(recording, float(info["duration_s"]), DATA.real(recording), results, theme)
-        return f"Patient {recording}. {note}", data_table(head, rows, 900), title, figure, None
+def model_swatch(model: str, theme: str, width: int = 22):
+    """Small line in the model's color and style, so identity never relies on the name alone."""
+    style = model_style(model, theme)
+    line = "dashed" if style["dash"] == "dash" else "solid"
+    return html.Span(style={"display": "inline-block", "width": width, "borderTop": f"3px {line} {style['color']}", "verticalAlign": "middle", "marginRight": 8})
 
-    best = models.loc[models["event_f1"].idxmax(), "model"]
-    rows = [
-        [
-            model_name(row.model, row.model == best), f"{row.threshold:.2f}", f"{row.event_f1:.2f}", f"{row.event_recall:.0%}",
-            f"{row.event_precision:.0%}", f"{row.found} / {row.found + row.missed}", str(row.missed),
-            f"{row.false_alarms} ({row.false_alarms_per_hour:.1f}/h)", f"{row.window_f1:.2f}",
-        ]
-        for row in models.itertuples(index=False)
-    ]
-    head = ["Model", "Threshold", "Event F1", "Recall", "Precision", "Seizures found", "Missed", "False alarms", "Window F1"]
-    patient_rows = []
-    for patient in DATA.recordings:
-        cells = [dmc.Text(patient, className="mono", size="sm", span=True), str(int(DATA.info(patient)["seizures"]))]
-        for row in models.itertuples(index=False):
-            _, _, metrics = DATA.detect(patient, row.threshold, row.model)
-            cells.append(f"{metrics['tp']}/{metrics['tp'] + metrics['fn']} · {metrics['fp']} false")
-        patient_rows.append(cells)
-    extra = panel(
-        [
-            card_title("Every patient, every model", "seizures found / real seizures · false alarms; the selected patient is highlighted"),
-            data_table(["Patient", "Real seizures", *models["model"]], patient_rows, 820, highlight=DATA.recordings.index(recording), max_height=520),
-        ]
+
+def ranking_values(model: str) -> dict:
+    entry = DATA.entry(model)
+    best = entry["at_best_threshold"]
+    event, window = best["event"], best["window"]
+    return {
+        "event_f1": event["f1"], "event_recall": event["recall"], "event_precision": event["precision"],
+        "found": event["tp"], "missed": event["fn"], "false_alarms": event["fp"], "false_alarms_per_hour": event["false_alarms_per_hour"],
+        "window_f1": window["f1"], "window_recall": window["recall"], "window_precision": window["precision"],
+        "onset_error": abs(event["onset_error_mean_s"]) if event["tp"] else float("nan"),
+        "offset_error": abs(event["offset_error_mean_s"]) if event["tp"] else float("nan"),
+        "fit_seconds": entry["fit_seconds_per_fold"], "threshold": best["threshold"],
+        "onset_signed": event["onset_error_mean_s"] if event["tp"] else float("nan"),
+        "offset_signed": event["offset_error_mean_s"] if event["tp"] else float("nan"),
+    }
+
+
+@app.callback(
+    Output("cmp-models", "value"), Output("cmp-preset", "value"), Output("cmp-training-box", "style"), Output("cmp-algo-box", "style"),
+    Input("cmp-preset", "value"), Input("cmp-training", "value"), Input("cmp-algo", "value"), Input("cmp-models", "value"),
+)
+def choose_comparison(preset, training, algorithm, models):
+    """Presets fill the model list; editing the list by hand switches to Custom."""
+    shown, hidden = {"display": "block"}, {"display": "none"}
+    presets = {
+        "mode": [f"{key}_{training}" for key in app_data.ALGORITHMS],
+        "algorithm": [f"{algorithm}_{mode}" for mode in app_data.MODES],
+        "all": DATA.models,
+    }
+    if ctx.triggered_id == "cmp-models":
+        ordered = [model for model in DATA.models if model in (models or [])]
+        matching = next((name for name in (preset, "mode", "algorithm", "all") if presets.get(name) == ordered), "custom")
+        preset = matching
+    elif preset != "custom":
+        ordered = presets[preset]
+    else:
+        ordered = [model for model in DATA.models if model in (models or [])]
+    return ordered, preset, shown if preset == "mode" else hidden, shown if preset == "algorithm" else hidden
+
+
+@app.callback(
+    Output("cmp-empty", "children"), Output("cmp-body", "style"), Output("cmp-cards", "children"), Output("cmp-ranking", "children"),
+    Input("cmp-models", "value"), Input("cmp-sort", "value"), Input("theme", "data"),
+)
+def comparison_summary(models, sort, theme):
+    models = [model for model in DATA.models if model in (models or [])]
+    if not models:
+        message = dmc.Alert("Choose at least one model in the list above to see the comparison.", color="gray", icon=icon("tabler:info-circle"))
+        return message, {"display": "none"}, [], None
+    values = {model: ranking_values(model) for model in models}
+    cards = []
+    for model in models:
+        value = values[model]
+        cards.append(
+            panel(
+                dmc.Stack(
+                    [
+                        dmc.Group([html.Span([model_swatch(model, theme), dmc.Text(DATA.label(model), fw=600, size="sm", span=True)]), dmc.Badge(f"threshold {value['threshold']:.2f}", size="sm", variant="light", color="violet", tt="none", className="mono")], justify="space-between"),
+                        dmc.Group(
+                            [
+                                dmc.Stack([dmc.Text("Event F1", size="xs", c="dimmed", fw=600, tt="uppercase"), dmc.Text(f"{value['event_f1']:.2f}", className="mono kpi-value")], gap=0),
+                                dmc.Stack(
+                                    [
+                                        dmc.Text(f"recall {value['event_recall']:.0%} · precision {value['event_precision']:.0%}", size="xs", className="mono"),
+                                        dmc.Text(f"{value['found']} found · {value['missed']} missed", size="xs", className="mono", c="dimmed"),
+                                        dmc.Text(f"{value['false_alarms']} false alarms ({value['false_alarms_per_hour']:.1f}/h)", size="xs", className="mono", c="dimmed"),
+                                    ],
+                                    gap=0,
+                                ),
+                            ],
+                            justify="space-between", align="flex-end",
+                        ),
+                    ],
+                    gap="xs",
+                )
+            )
+        )
+    _, higher, _ = RANKING[sort]
+    ordered = sorted(models, key=lambda model: (pd.isna(values[model][sort]), -values[model][sort] if higher else values[model][sort]))
+    best = {}
+    for key, (_, better_high, _) in RANKING.items():
+        column = [values[model][key] for model in models if not pd.isna(values[model][key])]
+        best[key] = (max(column) if better_high else min(column)) if column else None
+    head = ["#", "Model", "Threshold", *[label for label, *_rest in RANKING.values()]]
+    rows = []
+    for rank, model in enumerate(ordered, 1):
+        value = values[model]
+        cells = [dmc.TableTd(str(rank), className="mono"), dmc.TableTd(html.Span([model_swatch(model, theme), dmc.Text(DATA.label(model), fw=600, size="sm", span=True)]), style={"whiteSpace": "nowrap"}), dmc.TableTd(f"{value['threshold']:.2f}", className="mono")]
+        for key, (_, _, formatter) in RANKING.items():
+            shown = value[{"onset_error": "onset_signed", "offset_error": "offset_signed"}.get(key, key)]
+            is_best = best[key] is not None and not pd.isna(value[key]) and value[key] == best[key] and len(models) > 1
+            cells.append(
+                dmc.TableTd(
+                    "—" if pd.isna(shown) else formatter(shown), className="mono",
+                    style={"whiteSpace": "nowrap", **({"fontWeight": 700, "background": "var(--mantine-color-teal-light)"} if is_best else {})},
+                )
+            )
+        rows.append(dmc.TableTr(cells))
+    table = dmc.TableScrollContainer(
+        dmc.Table(
+            [dmc.TableThead(dmc.TableTr([dmc.TableTh(name, style={"whiteSpace": "nowrap", **({"textDecoration": "underline"} if name == RANKING[sort][0] else {})}) for name in head])), dmc.TableTbody(rows)],
+            highlightOnHover=True, verticalSpacing=8, horizontalSpacing=10, fz="sm",
+        ),
+        minWidth=1250, type="native",
     )
-    title = card_title("Scores on all patients", "recall = real seizures found; precision = detections that are real seizures")
-    total = int(models["found"].iloc[0] + models["missed"].iloc[0])
-    return f"All {len(DATA.recordings)} patients, {total} real seizures. {note}", data_table(head, rows, 900), title, models_bar_figure(models, theme), extra
+    return None, {"display": "block"}, cards, table
+
+
+@app.callback(
+    Output("cmp-f1", "figure"), Output("cmp-pr", "figure"), Output("cmp-distribution", "figure"), Output("cmp-confusion", "figure"),
+    Input("cmp-models", "value"), Input("theme", "data"),
+)
+def comparison_charts(models, theme):
+    models = [model for model in DATA.models if model in (models or [])]
+    if not models:
+        empty = message_figure("No model selected.", theme, 200)
+        return empty, empty, empty, empty
+    f1_curves, pr_curves, confusion = {}, {}, []
+    for model in models:
+        entry = DATA.entry(model)
+        best = entry["at_best_threshold"]
+        label = DATA.label(model, short=True)
+        f1_curves[model] = (label, DATA.sweeps.loc[DATA.sweeps["model"] == model], (best["threshold"], best["event"]["f1"]))
+        pr_curves[model] = (label, DATA.pr_curves.loc[DATA.pr_curves["model"] == model], (best["window"]["recall"], best["window"]["precision"]))
+        confusion.append((model, label, best["window"]))
+    modes = [mode for mode in app_data.MODES if any(model.endswith(mode) for model in models)]
+    distribution = [(app_data.MODES[mode], DATA.entry(f"rf_{mode}")["training"]) for mode in modes]
+    return (
+        curves_figure(f1_curves, "threshold", "f1", "Probability threshold", "Event F1", theme),
+        curves_figure(pr_curves, "recall", "precision", "Recall", "Precision", theme),
+        training_distribution_figure(distribution, theme),
+        confusion_figure(confusion, theme),
+    )
+
+
+@app.callback(
+    Output("cmp-timeline-title", "children"), Output("cmp-timeline", "figure"), Output("cmp-patients", "children"),
+    Input("cmp-models", "value"), Input("recording", "value"), Input("theme", "data"),
+)
+def comparison_patients(models, recording, theme):
+    models = [model for model in DATA.models if model in (models or [])]
+    title = card_title(f"Timeline of patient {recording}", "real seizures, then one row per model; faded = false alarm")
+    if not models:
+        return title, message_figure("No model selected.", theme, 200), None
+    results = {}
+    for model in models:
+        detected, matches, metrics = DATA.detect(recording, DATA.best_threshold(model), model)
+        results[model] = (DATA.label(model, short=True), detected, matches, metrics)
+    figure = patient_comparison_figure(recording, float(DATA.info(recording)["duration_s"]), DATA.real(recording), results, theme)
+
+    table = DATA.per_recording.loc[DATA.per_recording["model"].isin(models)].set_index(["recording", "model"])
+    head = [dmc.TableTh("Patient"), dmc.TableTh("Real seizures")] + [
+        dmc.TableTh(html.Span([model_swatch(model, theme, 16), DATA.label(model, short=True)]), style={"whiteSpace": "nowrap"}) for model in models
+    ]
+    rows = []
+    for patient in DATA.recordings:
+        scores = {model: table.loc[(patient, model)] for model in models}
+        top = max(score.event_f1 for score in scores.values())
+        cells = [
+            dmc.TableTd([dmc.Text(patient, className="mono", size="sm", span=True)] + ([dmc.Badge("Selected", size="xs", variant="light", color="teal", ml=6)] if patient == recording else [])),
+            dmc.TableTd(str(int(DATA.info(patient)["seizures"])), className="mono"),
+        ]
+        for model in models:
+            score = scores[model]
+            is_best = score.event_f1 == top and top > 0 and len(models) > 1
+            cells.append(
+                dmc.TableTd(
+                    [dmc.Text(f"{score.event_f1:.2f}", span=True, fw=700 if is_best else 400), dmc.Text(f"  {int(score.found)}/{int(score.found + score.missed)} · {int(score.false_alarms)}", span=True, c="dimmed", size="xs")],
+                    className="mono", style={"whiteSpace": "nowrap", **({"background": "var(--mantine-color-teal-light)"} if is_best else {})},
+                )
+            )
+        rows.append(dmc.TableTr(cells))
+    patients = dmc.TableScrollContainer(
+        dmc.Table([dmc.TableThead(dmc.TableTr(head)), dmc.TableTbody(rows)], highlightOnHover=True, verticalSpacing=6, horizontalSpacing=10, fz="sm", stickyHeader=True),
+        minWidth=260 + 150 * len(models), mah=560, type="native",
+    )
+    return title, figure, patients
 
 
 # ----------------------------------------------------------------------------- recording page
@@ -743,7 +1001,7 @@ def verdict(model: str, threshold: float, metrics: dict):
 
 @app.callback(
     Output("recording-info", "children"), Output("verdict", "children"), Output("intervals", "children"),
-    Input("recording", "value"), Input("threshold", "value"), Input("model", "value"), Input("page", "value"),
+    Input("recording", "value"), Input("threshold", "value"), Input("model", "data"), Input("page", "value"),
 )
 def recording_summary(recording, threshold, model, page):
     info = DATA.info(recording)
@@ -783,8 +1041,40 @@ def recording_summary(recording, threshold, model, page):
         table = [card_title("Real seizures of this patient", "from the annotations; times in seconds"), real_table(DATA.real(recording))]
         return header_row, None, table
     _, matches, metrics = DATA.detect(recording, threshold, model)
-    table = [card_title(f"Real vs predicted — {model}", "times in seconds; errors are detected − real"), intervals_table(matches)]
-    return header_row, verdict(model, threshold, metrics), table
+    table = [card_title(f"Real vs predicted — {DATA.label(model)}", "times in seconds; errors are detected − real"), intervals_table(matches)]
+    return header_row, verdict(DATA.label(model), threshold, metrics), table
+
+
+@app.callback(Output("model-overview", "children"), Input("model", "data"), Input("threshold", "value"), Input("page", "value"))
+def model_overview(model, threshold, page):
+    """How the active model does on all patients at the current threshold."""
+    if page != "prediction":
+        return None
+    _, _, metrics = DATA.detect_everything(threshold, model)
+    total = metrics["tp"] + metrics["fn"]
+    facts = [
+        ("Event F1", f"{metrics['f1']:.2f}"),
+        ("Recall", f"{metrics['recall']:.0%} ({metrics['tp']} of {total} seizures)"),
+        ("Precision", f"{metrics['precision']:.0%} of {metrics['detections']} detections"),
+        ("Missed", str(metrics["fn"])),
+        ("False alarms", f"{metrics['fp']} ({metrics['false_alarms_per_hour']:.1f} per hour)"),
+    ]
+    return panel(
+        dmc.Group(
+            [
+                dmc.Stack(
+                    [dmc.Text("This model on all 21 patients", fw=600, size="sm"), dmc.Text(f"{DATA.label(model)} at threshold {threshold:.2f}", size="xs", c="dimmed")],
+                    gap=0,
+                ),
+                dmc.Group(
+                    [dmc.Stack([dmc.Text(label, size="xs", c="dimmed"), dmc.Text(value, className="mono", size="sm", fw=500)], gap=0) for label, value in facts],
+                    gap="xl",
+                ),
+            ],
+            justify="space-between",
+        ),
+        py="sm",
+    )
 
 
 def page_length(value: str, duration: float) -> float:
@@ -799,10 +1089,10 @@ def clamp(start: float, length: float, duration: float) -> list[float]:
 @app.callback(
     Output("eeg", "figure"), Output("figure-meta", "data"), Output("view", "data"),
     Input("recording", "value"), Input("channels", "value"), Input("mode", "value"), Input("gain", "value"),
-    Input("events", "checked"), Input("theme", "data"), Input("page", "value"), Input("model", "value"),
+    Input("events", "checked"), Input("reference", "checked"), Input("theme", "data"), Input("page", "value"), Input("model", "data"),
     State("threshold", "value"), State("view", "data"), State("page-length", "value"), State("session", "data"),
 )
-def build_eeg(recording, channels, mode, gain, show_events, theme, page, model, threshold, view, length, session):
+def build_eeg(recording, channels, mode, gain, show_events, show_reference, theme, page, model, threshold, view, length, session):
     if page == "comparison":
         # The EEG is hidden on this page; keep whatever is drawn.
         return no_update, no_update, no_update
@@ -823,12 +1113,16 @@ def build_eeg(recording, channels, mode, gain, show_events, theme, page, model, 
     else:
         view_range = view["range"]
     detected = DATA.detect(recording, threshold, model)[0] if prediction else None
+    references = None
+    if show_reference:
+        table = app_data.reference(recording)
+        references = {name: table[name].to_numpy() for name in ("ECG", "EMG1", "EMG2", "SLI") if name in table}
     figure, description = recording_figure(
         frame["Time"].to_numpy(), {channel: frame[channel].to_numpy() for channel in channels},
         DATA.windows(recording, model) if prediction else None,
         DATA.real(recording), detected, DATA.technician(recording) if show_events else None, threshold if prediction else None,
         stacked=mode == "stacked", full_scale=app_data.amplitude_scale(recording), gain=0.5 * 2 ** gain,
-        view=tuple(view_range), theme=theme,
+        view=tuple(view_range), theme=theme, references=references,
     )
     FIGURES[session] = figure
     FIGURES.move_to_end(session)
@@ -970,7 +1264,7 @@ def show_spectrum(point, theme, channels):
 
 @app.callback(
     Output("download", "data"), Input("save-csv", "n_clicks"),
-    State("recording", "value"), State("threshold", "value"), State("model", "value"), State("page", "value"),
+    State("recording", "value"), State("threshold", "value"), State("model", "data"), State("page", "value"),
     prevent_initial_call=True,
 )
 def download_intervals(_, recording, threshold, model, page):
@@ -983,11 +1277,11 @@ def download_intervals(_, recording, threshold, model, page):
     _, matches, _ = DATA.detect(recording, threshold, model)
     table = matches.rename(columns={"status": "status_code"})
     table.insert(0, "recording", recording)
-    table.insert(1, "model", model)
+    table.insert(1, "model", DATA.label(model))
     table.insert(2, "threshold", threshold)
     table.insert(3, "status", table["status_code"].map({code: label for code, (label, _, _) in STATUS.items()}))
     table = table.drop(columns="status_code").round({"max_proba": 2})
-    name = f"{recording}_{model.lower().replace(' ', '_')}_threshold_{threshold:.2f}.csv"
+    name = f"{recording}_{model}_threshold_{threshold:.2f}.csv"
     return dcc.send_data_frame(table.to_csv, name, index=False)
 
 

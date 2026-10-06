@@ -1,6 +1,8 @@
 """Print detected seizure intervals for one recording and compare them with the annotations.
 
 Uses the out-of-fold probabilities, i.e. predictions from a model that never saw the recording.
+Choose one of the 8 registered models with --algo and --mode; without them the default model
+of models/registry.json (best event-level F1) is used.
 """
 
 from argparse import ArgumentParser
@@ -16,29 +18,28 @@ sys.path.insert(0, str(ROOT))
 from src.detection import event_metrics, match_events, windows_to_intervals
 
 
-PREDICTIONS = ROOT / "outputs/predictions_oof.parquet"
+REGISTRY = ROOT / "models/registry.json"
 ANNOTATIONS = ROOT / "data/interim/official/annotations_clean.csv"
-SUMMARY = ROOT / "outputs/detection_summary.json"
-
-
-def default_threshold() -> float:
-    if SUMMARY.exists():
-        return float(json.loads(SUMMARY.read_text())["threshold"])
-    return 0.5
 
 
 def main() -> None:
     parser = ArgumentParser(description=__doc__)
     parser.add_argument("--recording", required=True, help="Recording ID, e.g. 190304A_E")
-    parser.add_argument("--threshold", type=float, help="Probability threshold (default: the event-F1 optimum from Part X)")
+    parser.add_argument("--algo", choices=["dt", "rf", "knn", "svm"], help="Algorithm (default: the registry's default model)")
+    parser.add_argument("--mode", choices=["unbalanced", "balanced"], help="Training mode (default: the registry's default model)")
+    parser.add_argument("--threshold", type=float, help="Probability threshold (default: the model's best event-F1 threshold)")
     args = parser.parse_args()
-    if not PREDICTIONS.exists():
-        sys.exit(f"Missing {PREDICTIONS.relative_to(ROOT)}: run `python scripts/predict_oof.py` first.")
-    predictions = pd.read_parquet(PREDICTIONS)
+    if not REGISTRY.exists():
+        sys.exit(f"Missing {REGISTRY.relative_to(ROOT)}: run `python scripts/train_registry.py` first.")
+    registry = json.loads(REGISTRY.read_text())
+    default_algo, default_mode = registry["default_model"].split("_")
+    key = f"{args.algo or default_algo}_{args.mode or default_mode}"
+    entry = registry["models"][key]
+    predictions = pd.read_parquet(ROOT / entry["predictions"])
     available = sorted(predictions["recording"].unique())
     if args.recording not in available:
         sys.exit(f"Unknown recording {args.recording!r}. Available: {', '.join(available)}")
-    threshold = default_threshold() if args.threshold is None else args.threshold
+    threshold = entry["best_threshold"] if args.threshold is None else args.threshold
     if not 0 < threshold <= 1:
         sys.exit("--threshold must be in (0, 1].")
 
@@ -50,7 +51,8 @@ def main() -> None:
     metrics = event_metrics(matches, len(detected))
     false_starts = set(matches.loc[matches["status"] == "FP", "detected_start_s"])
 
-    print(f"Enregistrement {args.recording} — seuil {threshold:.2f} (probabilités hors-pli)")
+    mode = {"unbalanced": "non équilibré", "balanced": "équilibré"}[entry["mode"]]
+    print(f"Enregistrement {args.recording} — {entry['algorithm_name']}, entraînement {mode} — seuil {threshold:.2f} (probabilités hors-pli)")
     print()
     if detected.empty:
         print("Aucune crise détectée")

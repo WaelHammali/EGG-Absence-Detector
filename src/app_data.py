@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
+import json
 
 import numpy as np
 import pandas as pd
@@ -15,26 +16,32 @@ from src.io import CHANNELS, FS
 
 ROOT = Path(__file__).resolve().parents[1]
 APP_DATA = ROOT / "data/processed/app"
+REGISTRY = ROOT / "models/registry.json"
 REQUIRED = {
-    "outputs/predictions_oof_models.parquet": "python scripts/predict_oof.py",
-    "outputs/model_comparison.csv": "python scripts/predict_oof.py",
+    "models/registry.json": "python scripts/train_registry.py",
     "data/processed/app/recording_metadata.csv": "python scripts/prepare_app_data.py",
     "data/processed/app/technician_events.csv": "python scripts/prepare_app_data.py",
+    "data/processed/app/model_sweeps.parquet": "python scripts/prepare_app_data.py",
+    "data/processed/app/model_pr_curves.parquet": "python scripts/prepare_app_data.py",
+    "data/processed/app/model_per_recording.csv": "python scripts/prepare_app_data.py",
     "data/interim/official/annotations_clean.csv": "python scripts/build_dataset.py --annotations official",
 }
+ALGORITHMS = {"dt": "Decision Tree", "rf": "Random Forest", "knn": "KNN", "svm": "SVM"}
+ALGORITHM_SHORT = {"dt": "DT", "rf": "RF", "knn": "KNN", "svm": "SVM"}
+MODES = {"unbalanced": "Unbalanced", "balanced": "Balanced"}
 
 
 class MissingData(Exception):
     """Raised with a user-facing message when a precomputed file is absent."""
 
 
-DEFAULT_MODEL = "Random Forest"
-
-
 @dataclass(frozen=True)
 class AppData:
-    predictions: dict[str, pd.DataFrame]  # model name -> out-of-fold window probabilities
-    comparison: pd.DataFrame  # one row per model: best threshold and overall scores
+    registry: dict  # models/registry.json
+    predictions: dict[str, pd.DataFrame]  # model key -> out-of-fold window probabilities
+    sweeps: pd.DataFrame  # scores of every model at every threshold
+    pr_curves: pd.DataFrame  # window-level precision-recall curve of every model
+    per_recording: pd.DataFrame  # event results of every model on every recording, at its best threshold
     annotations: pd.DataFrame
     metadata: pd.DataFrame
     events: pd.DataFrame
@@ -45,11 +52,23 @@ class AppData:
 
     @property
     def models(self) -> list[str]:
-        return self.comparison["model"].tolist()
+        """Model keys such as ``rf_unbalanced``, algorithm by algorithm."""
+        return list(self.registry["models"])
+
+    @property
+    def default_model(self) -> str:
+        return self.registry["default_model"]
+
+    def entry(self, model: str) -> dict:
+        return self.registry["models"][model]
+
+    def label(self, model: str, short: bool = False) -> str:
+        algorithm, mode = model.split("_")
+        return f"{(ALGORITHM_SHORT if short else ALGORITHMS)[algorithm]} · {MODES[mode]}"
 
     def best_threshold(self, model: str) -> float:
         """Threshold maximizing event-level F1 for this model on out-of-fold predictions."""
-        return float(self.comparison.set_index("model").loc[model, "threshold"])
+        return float(self.entry(model)["best_threshold"])
 
     def info(self, recording: str) -> pd.Series:
         return self.metadata.set_index("recording").loc[recording]
@@ -58,14 +77,14 @@ class AppData:
         frame = self.annotations.loc[self.annotations["recording"] == recording, ["start_s", "end_s"]]
         return frame.sort_values("start_s").reset_index(drop=True)
 
-    def windows(self, recording: str, model: str = DEFAULT_MODEL) -> pd.DataFrame:
+    def windows(self, recording: str, model: str) -> pd.DataFrame:
         frame = self.predictions[model]
         return frame.loc[frame["recording"] == recording]
 
     def technician(self, recording: str) -> pd.DataFrame:
         return self.events.loc[self.events["recording"] == recording]
 
-    def detect(self, recording: str, threshold: float, model: str = DEFAULT_MODEL) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
+    def detect(self, recording: str, threshold: float, model: str) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
         """Detected intervals, event matches and metrics for one recording and one model."""
         group = self.windows(recording, model)
         detected = windows_to_intervals(group["start_s"], group["end_s"], group["proba"], threshold)
@@ -82,7 +101,7 @@ class AppData:
         }
         return detected, matches, metrics
 
-    def detect_everything(self, threshold: float, model: str = DEFAULT_MODEL) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
+    def detect_everything(self, threshold: float, model: str) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
         detected, matches = detect_all(self.predictions[model], self.annotations, threshold)
         metrics = event_metrics(matches, len(detected))
         metrics["detections"] = len(detected)
@@ -98,13 +117,30 @@ def load() -> AppData:
             "Some precomputed files are missing: " + ", ".join(path for path, _ in missing)
             + ". Run: " + " ; ".join(steps)
         )
-    table = pd.read_parquet(ROOT / "outputs/predictions_oof_models.parquet")
-    predictions = {model: group.drop(columns="model").reset_index(drop=True) for model, group in table.groupby("model", sort=False)}
-    comparison = pd.read_csv(ROOT / "outputs/model_comparison.csv")
-    annotations = pd.read_csv(ROOT / "data/interim/official/annotations_clean.csv")
-    metadata = pd.read_csv(APP_DATA / "recording_metadata.csv").fillna({"absence_type": ""})
-    events = pd.read_csv(APP_DATA / "technician_events.csv")
-    return AppData(predictions, comparison, annotations, metadata, events)
+    registry = json.loads(REGISTRY.read_text())
+    absent = [entry["predictions"] for entry in registry["models"].values() if not (ROOT / entry["predictions"]).exists()]
+    if absent:
+        raise MissingData("Prediction files are missing: " + ", ".join(absent) + ". Run: python scripts/train_registry.py")
+    predictions = {key: pd.read_parquet(ROOT / entry["predictions"]) for key, entry in registry["models"].items()}
+    return AppData(
+        registry=registry,
+        predictions=predictions,
+        sweeps=pd.read_parquet(APP_DATA / "model_sweeps.parquet"),
+        pr_curves=pd.read_parquet(APP_DATA / "model_pr_curves.parquet"),
+        per_recording=pd.read_csv(APP_DATA / "model_per_recording.csv"),
+        annotations=pd.read_csv(ROOT / "data/interim/official/annotations_clean.csv"),
+        metadata=pd.read_csv(APP_DATA / "recording_metadata.csv").fillna({"absence_type": "", "reference_channels": ""}),
+        events=pd.read_csv(APP_DATA / "technician_events.csv"),
+    )
+
+
+@lru_cache(maxsize=4)
+def reference(recording: str) -> pd.DataFrame:
+    """Non-EEG channels of one recording (ECG, EMG, SLI where recorded). Never model inputs."""
+    path = APP_DATA / f"reference/{recording}.parquet"
+    if not path.exists():
+        raise MissingData(f"Reference channels for {recording} are missing. Run: python scripts/prepare_app_data.py")
+    return pd.read_parquet(path)
 
 
 @lru_cache(maxsize=4)
