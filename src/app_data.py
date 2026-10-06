@@ -109,7 +109,7 @@ def load() -> AppData:
 
 @lru_cache(maxsize=4)
 def signal(recording: str) -> pd.DataFrame:
-    """Filtered signal of one recording: Time + 8 channels (float32)."""
+    """Filtered signal of one recording: Time + the EEG channels (float32)."""
     path = APP_DATA / f"signals/{recording}.parquet"
     if not path.exists():
         raise MissingData(f"Filtered signal for {recording} is missing. Run: python scripts/prepare_app_data.py")

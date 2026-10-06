@@ -1,6 +1,6 @@
 {
   "dataset": "data/processed/windows_features_official.parquet",
-  "features": 144,
+  "features": 320,
   "seed": 42,
   "random_split": {
     "train_windows": 25135,

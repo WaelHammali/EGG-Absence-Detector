@@ -1,0 +1,40 @@
+{
+  "model": "RandomForestClassifier (default hyperparameters, unbalanced training)",
+  "predictions": "out-of-fold, GroupKFold by recording (5 folds)",
+  "threshold": 0.68,
+  "min_gap_s": 2.0,
+  "min_duration_s": 2.0,
+  "detections": 129,
+  "recorded_hours": 8.733333333333333,
+  "false_alarms_per_hour": 2.9770992366412217,
+  "false_in_hpn": 15,
+  "event": {
+    "tp": 86,
+    "fn": 7,
+    "fp": 26,
+    "precision": 0.7984496124031008,
+    "recall": 0.9247311827956989,
+    "f1": 0.856963188700237,
+    "onset_error_mean_s": 1.1395348837209303,
+    "onset_error_abs_median_s": 1.0,
+    "offset_error_mean_s": -1.186046511627907,
+    "offset_error_abs_median_s": 1.0
+  },
+  "event_at_0.50": {
+    "tp": 90,
+    "fn": 3,
+    "fp": 40,
+    "precision": 0.726027397260274,
+    "recall": 0.967741935483871,
+    "f1": 0.8296373597704149
+  },
+  "window": {
+    "tp": 658,
+    "fp": 114,
+    "fn": 586,
+    "tn": 30061,
+    "precision": 0.8523316062176166,
+    "recall": 0.5289389067524116,
+    "f1": 0.6527777777777778
+  }
+}

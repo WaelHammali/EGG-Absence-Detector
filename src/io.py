@@ -8,7 +8,14 @@ import pandas as pd
 
 
 FS = 256.0
-CHANNELS = ("Fp1", "Fp2", "C3", "C4", "T3", "T4", "O1", "O2")
+# The 19 EEG channels of the 10-20 montage, present in every annotated recording, front to back.
+CHANNELS = (
+    "Fp1", "Fp2", "F7", "F3", "Fz", "F4", "F8", "T3", "C3", "Cz", "C4", "T4",
+    "T5", "P3", "Pz", "P4", "T6", "O1", "O2",
+)
+# Channels used to score annotation alternatives. This is the set the clock offsets were
+# inferred with, kept fixed so that annotation decisions do not depend on the feature channels.
+SCORING_CHANNELS = ("Fp1", "Fp2", "C3", "C4", "T3", "T4", "O1", "O2")
 RAW_CHANNELS = tuple(f"EEG{channel}" for channel in CHANNELS)
 
 
@@ -19,7 +26,7 @@ def recording_ids(raw_dir: str | Path) -> list[str]:
 
 
 def load_recording(path: str | Path) -> pd.DataFrame:
-    """Load one d-file as float32 [Time, Fp1, Fp2, C3, C4, T3, T4, O1, O2]."""
+    """Load one d-file as float32 [Time, *CHANNELS]."""
     path = Path(path)
     table = load_from_mat(path, variable_names=["output_d"])["output_d"]
     missing = [channel for channel in RAW_CHANNELS if channel not in table.columns]

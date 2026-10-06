@@ -24,14 +24,14 @@ THEMES = {
         "background": "#0B1220", "panel": "#111A2E", "text": "#E5E9F0", "muted": "#94A3B8",
         "grid": "rgba(148,163,184,0.13)", "axis": "rgba(148,163,184,0.35)", "track": "rgba(148,163,184,0.10)",
         "probability": "#CBD5E1",
-        # Region hues (frontal, central, temporal, occipital); left and right share a hue.
-        "regions": {"Fp": "#4FD1C5", "C": "#3B82F6", "T": "#E05599", "O": "#4698CF"},
+        # Region hues (frontal, central, temporal, posterior); channels of a region share a hue.
+        "regions": {"frontal": "#4FD1C5", "central": "#3B82F6", "temporal": "#E05599", "posterior": "#4698CF"},
     },
     "light": {
         "background": "#F6F8FB", "panel": "#FFFFFF", "text": "#0F172A", "muted": "#64748B",
         "grid": "rgba(15,23,42,0.08)", "axis": "rgba(15,23,42,0.30)", "track": "rgba(15,23,42,0.05)",
         "probability": "#475569",
-        "regions": {"Fp": "#0D9488", "C": "#2563EB", "T": "#DB2777", "O": "#0284C7"},
+        "regions": {"frontal": "#0D9488", "central": "#2563EB", "temporal": "#DB2777", "posterior": "#0284C7"},
     },
 }
 
@@ -41,8 +41,13 @@ def rgba(color: str, alpha: float) -> str:
     return f"rgba({red},{green},{blue},{alpha})"
 
 
+# Scalp region of each electrode family; parietal and occipital form the posterior region.
+REGIONS = {"Fp": "frontal", "F": "frontal", "C": "central", "T": "temporal", "P": "posterior", "O": "posterior"}
+
+
 def channel_color(channel: str, theme: str) -> str:
-    return THEMES[theme]["regions"][channel.rstrip("0123456789")]
+    family = channel.rstrip("0123456789z")
+    return THEMES[theme]["regions"][REGIONS[family]]
 
 
 def base_layout(theme: str) -> dict:
@@ -167,7 +172,9 @@ def recording_figure(
     has_strip = has_events or len(real) > 0
     duration = float(time[-1])
     probability_height, event_height = 140, 34
-    eeg_height = (78 * len(rows) if stacked else 360)
+    # Rows get shorter as channels are added, so the full montage still fits on a screen.
+    row_pixels = 78 if len(rows) <= 8 else 60 if len(rows) <= 12 else 46
+    eeg_height = (row_pixels * len(rows) if stacked else 360)
     eeg_height = max(eeg_height, 200)
     gap = 26
     plot_height = eeg_height + probability_height + gap + (event_height + 6 if has_strip else 0)
@@ -395,7 +402,7 @@ def models_bar_figure(comparison: pd.DataFrame, theme: str) -> go.Figure:
     """All patients: event-level F1, recall and precision of every model, one panel per score."""
     tokens = THEMES[theme]
     scores = [("event_f1", "Event F1"), ("event_recall", "Recall"), ("event_precision", "Precision")]
-    color = tokens["regions"]["C"]
+    color = tokens["regions"]["central"]
     figure = go.Figure()
     layout = {}
     for index, (column, title) in enumerate(scores):

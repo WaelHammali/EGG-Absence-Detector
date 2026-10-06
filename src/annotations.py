@@ -12,7 +12,7 @@ from openpyxl import load_workbook
 import pandas as pd
 import yaml
 
-from src.io import CHANNELS, FS, load_recording
+from src.io import FS, SCORING_CHANNELS, load_recording
 
 
 @dataclass
@@ -200,7 +200,7 @@ def _resolve_official(root: Path, output_dir: Path, decisions: dict) -> dict:
         strategy = rule["strategy"]
         if strategy == "best_signal_score":
             frame = load_recording(root / f"data/raw/{recording}_0000d.mat")
-            signal = frame.loc[:, CHANNELS].to_numpy(dtype=np.float32, copy=False)
+            signal = frame.loc[:, list(SCORING_CHANNELS)].to_numpy(dtype=np.float32, copy=False)
             scored = []
             for row in candidates:
                 intervals = [(start, end) for start, end, _ in _row_intervals(row)]
@@ -242,7 +242,7 @@ def _resolve_official(root: Path, output_dir: Path, decisions: dict) -> dict:
             metrics = None
             if strategy == "signal_confirmed":
                 frame = load_recording(root / f"data/raw/{recording}_0000d.mat")
-                signal = frame.loc[:, CHANNELS].to_numpy(dtype=np.float32, copy=False)
+                signal = frame.loc[:, list(SCORING_CHANNELS)].to_numpy(dtype=np.float32, copy=False)
                 metrics = score_intervals(signal, candidate, scoring)
                 keep = metrics["score"] > 0 and metrics["inside_outside_ratio"] >= float(correction["minimum_inside_outside_ratio"])
                 score_log[f"{recording}_correction"] = [metrics]
@@ -328,7 +328,7 @@ def _resolve_official(root: Path, output_dir: Path, decisions: dict) -> dict:
         if row is None:
             continue
         frame = load_recording(root / f"data/raw/{recording}_0000d.mat")
-        signal = frame.loc[:, CHANNELS].to_numpy(dtype=np.float32, copy=False)
+        signal = frame.loc[:, list(SCORING_CHANNELS)].to_numpy(dtype=np.float32, copy=False)
         intervals = [(start, end) for start, end, _ in _row_intervals(row)]
         metrics = score_intervals(signal, intervals, scoring)
         score_log[f"{recording}_official_validation"] = [metrics]

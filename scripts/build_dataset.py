@@ -249,7 +249,8 @@ def write_report(mode: str, summary: dict, suffix: str) -> None:
     lines = [
         f"# Dataset report — {mode.capitalize()} annotations" + (" (unfiltered)" if suffix else ""),
         "",
-        "The dataset contains 2 s windows (512 samples at 256 Hz) with a 1 s hop. A window is positive when at least 256 samples are inside a seizure interval. Features use Fp1, Fp2, C3, C4, T3, T4, O1 and O2.",
+        "The dataset contains 2 s windows (512 samples at 256 Hz) with a 1 s hop. A window is positive when at least 256 samples are inside a seizure interval. "
+        f"Features use the {len(CHANNELS)} EEG channels {', '.join(CHANNELS)}; ECG, EMG and SLI are not used.",
         "",
         filter_text,
         "",

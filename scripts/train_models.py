@@ -12,6 +12,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import pyarrow.parquet as pq
 from sklearn.base import clone
 from sklearn.dummy import DummyClassifier
 from sklearn.ensemble import RandomForestClassifier
@@ -32,6 +33,8 @@ from sklearn.tree import DecisionTreeClassifier
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+
+from src.io import CHANNELS
 
 
 SEED = 42
@@ -205,6 +208,7 @@ def write_report(
 ) -> None:
     names = [BASELINE, *models()]
     learned = list(models())
+    feature_count = len([column for column in pq.read_schema(dataset).names if column not in METADATA])
     random_by = {t: random_results.loc[random_results.training == t].set_index("model").loc[names] for t in ["sous-échantillonné", "non équilibré"]}
     group_by = {t: group_summary.xs(t, level="training").loc[names] for t in ["sous-échantillonné", "non équilibré"]}
     balanced, unbalanced = random_by["sous-échantillonné"], random_by["non équilibré"]
@@ -237,7 +241,7 @@ def write_report(
     lines = [
         "# Parties VIII–IX — Modèles de classification",
         "",
-        f"Jeu de données : `{dataset.relative_to(ROOT)}` (annotations officielles, signal filtré passe-bande 0,5–40 Hz, 144 caractéristiques). "
+        f"Jeu de données : `{dataset.relative_to(ROOT)}` (annotations officielles, signal filtré passe-bande 0,5–40 Hz, {feature_count} caractéristiques sur {len(CHANNELS)} canaux EEG). "
         "Hyperparamètres par défaut de scikit-learn, sans réglage (prévu en Partie X). Arbre de décision et Random Forest sans normalisation; "
         "KNN et SVM avec `StandardScaler` dans le `Pipeline`, donc ajusté sur les seules données d’entraînement. `random_state=42` partout.",
         "",

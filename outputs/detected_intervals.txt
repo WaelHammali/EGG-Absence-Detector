@@ -11,7 +11,7 @@
   Crise détectée 1 : 143.0 s → 149.0 s
   Crise détectée 2 : 303.0 s → 308.0 s
   Crise détectée 3 : 530.0 s → 536.0 s
-  Crise détectée 4 : 669.0 s → 674.0 s
+  Crise détectée 4 : 667.0 s → 674.0 s
   Crise détectée 5 : 754.0 s → 759.0 s
   Crise détectée 6 : 1216.0 s → 1222.0 s
   Crise réelle 1 : 143.5 s → 148.5 s
@@ -24,7 +24,7 @@
 210208B_G
   Crise détectée 1 : 498.0 s → 513.0 s
   Crise détectée 2 : 568.0 s → 575.0 s
-  Crise détectée 3 : 820.0 s → 829.0 s
+  Crise détectée 3 : 817.0 s → 829.0 s
   Crise détectée 4 : 1079.0 s → 1095.0 s
   Crise réelle 1 : 496.8 s → 506.8 s
   Crise réelle 2 : 567.8 s → 574.8 s
@@ -36,39 +36,39 @@
   Crise réelle 1 : 633.0 s → 641.0 s
 
 210427B_C
-  Crise détectée 1 : 277.0 s → 281.0 s  (fausse alarme)
-  Crise détectée 2 : 287.0 s → 293.0 s  (fausse alarme)
-  Crise détectée 3 : 327.0 s → 332.0 s  (fausse alarme)
+  Crise détectée 1 : 278.0 s → 280.0 s  (fausse alarme)
+  Crise détectée 2 : 288.0 s → 293.0 s  (fausse alarme)
+  Crise détectée 3 : 327.0 s → 331.0 s  (fausse alarme)
   Crise détectée 4 : 345.0 s → 348.0 s  (fausse alarme)
-  Crise détectée 5 : 817.0 s → 821.0 s  (fausse alarme)
-  Crise détectée 6 : 825.0 s → 828.0 s  (fausse alarme)
-  Crise détectée 7 : 832.0 s → 835.0 s  (fausse alarme)
-  Crise détectée 8 : 890.0 s → 895.0 s  (fausse alarme)
-  Crise détectée 9 : 1031.0 s → 1044.0 s
-  Crise détectée 10 : 1047.0 s → 1050.0 s
+  Crise détectée 5 : 817.0 s → 819.0 s  (fausse alarme)
+  Crise détectée 6 : 826.0 s → 828.0 s  (fausse alarme)
+  Crise détectée 7 : 832.0 s → 834.0 s  (fausse alarme)
+  Crise détectée 8 : 892.0 s → 898.0 s  (fausse alarme)
+  Crise détectée 9 : 1032.0 s → 1044.0 s
+  Crise détectée 10 : 1047.0 s → 1049.0 s
   Crise réelle 1 : 1031.0 s → 1049.0 s
 
 210504B_C
-  Crise détectée 1 : 1.0 s → 8.0 s
+  Crise détectée 1 : 0.0 s → 8.0 s
   Crise détectée 2 : 730.0 s → 747.0 s
-  Crise détectée 3 : 1041.0 s → 1045.0 s
+  Crise détectée 3 : 1041.0 s → 1046.0 s
   Crise détectée 4 : 1126.0 s → 1130.0 s
   Crise détectée 5 : 1217.0 s → 1220.0 s
-  Crise détectée 6 : 1281.0 s → 1283.0 s  (fausse alarme)
-  Crise détectée 7 : 1344.0 s → 1346.0 s
+  Crise détectée 6 : 1281.0 s → 1284.0 s  (fausse alarme)
+  Crise détectée 7 : 1344.0 s → 1347.0 s
   Crise détectée 8 : 1375.0 s → 1386.0 s
   Crise détectée 9 : 1460.0 s → 1473.0 s
   Crise détectée 10 : 1700.0 s → 1703.0 s
-  Crise détectée 11 : 1860.0 s → 1862.0 s  (fausse alarme)
-  Crise détectée 12 : 1873.0 s → 1875.0 s
-  Crise détectée 13 : 1940.0 s → 1943.0 s  (fausse alarme)
-  Crise détectée 14 : 1975.0 s → 1982.0 s
-  Crise détectée 15 : 2249.0 s → 2269.0 s  (fausse alarme)
-  Crise détectée 16 : 2274.0 s → 2276.0 s  (fausse alarme)
-  Crise détectée 17 : 2400.0 s → 2411.0 s
-  Crise détectée 18 : 2837.0 s → 2856.0 s  (fausse alarme)
-  Crise détectée 19 : 2858.0 s → 2862.0 s  (fausse alarme)
-  Crise détectée 20 : 3003.0 s → 3011.0 s  (fausse alarme)
+  Crise détectée 11 : 1873.0 s → 1876.0 s
+  Crise détectée 12 : 1940.0 s → 1943.0 s  (fausse alarme)
+  Crise détectée 13 : 1975.0 s → 1982.0 s
+  Crise détectée 14 : 2249.0 s → 2269.0 s  (fausse alarme)
+  Crise détectée 15 : 2274.0 s → 2276.0 s  (fausse alarme)
+  Crise détectée 16 : 2401.0 s → 2411.0 s
+  Crise détectée 17 : 2838.0 s → 2863.0 s  (fausse alarme)
+  Crise détectée 18 : 3001.0 s → 3003.0 s  (fausse alarme)
+  Crise détectée 19 : 3007.0 s → 3011.0 s  (fausse alarme)
+  Crise détectée 20 : 3019.0 s → 3021.0 s  (fausse alarme)
   Crise réelle 1 : 0.0 s → 8.0 s
   Crise réelle 2 : 731.0 s → 747.0 s
   Crise réelle 3 : 1041.0 s → 1047.0 s
@@ -85,18 +85,18 @@
 210914B_A
   Crise détectée 1 : 15.0 s → 19.0 s
   Crise détectée 2 : 28.0 s → 33.0 s
-  Crise détectée 3 : 38.0 s → 42.0 s
-  Crise détectée 4 : 63.0 s → 65.0 s
-  Crise détectée 5 : 81.0 s → 85.0 s
-  Crise détectée 6 : 99.0 s → 106.0 s
-  Crise détectée 7 : 154.0 s → 160.0 s
-  Crise détectée 8 : 169.0 s → 174.0 s
-  Crise détectée 9 : 272.0 s → 276.0 s
-  Crise détectée 10 : 359.0 s → 366.0 s
-  Crise détectée 11 : 372.0 s → 374.0 s
-  Crise détectée 12 : 383.0 s → 386.0 s
-  Crise détectée 13 : 513.0 s → 517.0 s
-  Crise détectée 14 : 526.0 s → 540.0 s
+  Crise détectée 3 : 44.0 s → 46.0 s
+  Crise détectée 4 : 81.0 s → 85.0 s
+  Crise détectée 5 : 99.0 s → 106.0 s
+  Crise détectée 6 : 154.0 s → 160.0 s
+  Crise détectée 7 : 169.0 s → 174.0 s
+  Crise détectée 8 : 272.0 s → 276.0 s
+  Crise détectée 9 : 359.0 s → 366.0 s
+  Crise détectée 10 : 372.0 s → 374.0 s
+  Crise détectée 11 : 383.0 s → 386.0 s
+  Crise détectée 12 : 514.0 s → 517.0 s
+  Crise détectée 13 : 526.0 s → 535.0 s
+  Crise détectée 14 : 537.0 s → 540.0 s
   Crise détectée 15 : 543.0 s → 548.0 s
   Crise détectée 16 : 555.0 s → 557.0 s
   Crise détectée 17 : 673.0 s → 680.0 s
@@ -117,23 +117,24 @@
   Crise réelle 11 : 1026.0 s → 1038.0 s
 
 210928B_B
-  Crise détectée 1 : 1153.0 s → 1175.0 s
-  Crise détectée 2 : 1290.0 s → 1295.0 s
-  Crise détectée 3 : 1297.0 s → 1314.0 s
+  Crise détectée 1 : 1153.0 s → 1155.0 s
+  Crise détectée 2 : 1157.0 s → 1165.0 s
+  Crise détectée 3 : 1290.0 s → 1293.0 s
+  Crise détectée 4 : 1296.0 s → 1314.0 s
   Crise réelle 1 : 1152.0 s → 1182.0 s
   Crise réelle 2 : 1290.0 s → 1315.0 s
 
 211027B_C
-  Crise détectée 1 : 131.0 s → 150.0 s
+  Crise détectée 1 : 131.0 s → 151.0 s
   Crise détectée 2 : 166.0 s → 173.0 s
   Crise détectée 3 : 186.0 s → 195.0 s
   Crise détectée 4 : 385.0 s → 392.0 s
   Crise détectée 5 : 399.0 s → 409.0 s
   Crise détectée 6 : 424.0 s → 439.0 s  (fausse alarme)
-  Crise détectée 7 : 614.0 s → 626.0 s
-  Crise détectée 8 : 834.0 s → 844.0 s  (fausse alarme)
-  Crise détectée 9 : 1101.0 s → 1135.0 s
-  Crise détectée 10 : 1141.0 s → 1147.0 s
+  Crise détectée 7 : 614.0 s → 625.0 s
+  Crise détectée 8 : 834.0 s → 845.0 s  (fausse alarme)
+  Crise détectée 9 : 1101.0 s → 1137.0 s
+  Crise détectée 10 : 1139.0 s → 1147.0 s
   Crise détectée 11 : 1160.0 s → 1167.0 s
   Crise réelle 1 : 132.0 s → 150.0 s
   Crise réelle 2 : 166.0 s → 174.0 s
@@ -145,11 +146,12 @@
   Crise réelle 8 : 1158.0 s → 1167.0 s
 
 211104B_D
-  Crise détectée 1 : 253.0 s → 260.0 s
-  Crise détectée 2 : 388.0 s → 392.0 s
-  Crise détectée 3 : 556.0 s → 561.0 s
-  Crise détectée 4 : 808.0 s → 813.0 s
-  Crise détectée 5 : 897.0 s → 903.0 s
+  Crise détectée 1 : 51.0 s → 60.0 s  (fausse alarme)
+  Crise détectée 2 : 253.0 s → 260.0 s
+  Crise détectée 3 : 384.0 s → 392.0 s
+  Crise détectée 4 : 555.0 s → 565.0 s
+  Crise détectée 5 : 808.0 s → 813.0 s
+  Crise détectée 6 : 897.0 s → 903.0 s
   Crise réelle 1 : 253.0 s → 259.0 s
   Crise réelle 2 : 384.0 s → 392.0 s
   Crise réelle 3 : 555.0 s → 565.0 s
@@ -157,17 +159,16 @@
   Crise réelle 5 : 896.0 s → 904.0 s
 
 220106A_A
-  Crise détectée 1 : 340.0 s → 344.0 s
+  Crise détectée 1 : 339.0 s → 344.0 s
   Crise détectée 2 : 350.0 s → 353.0 s
-  Crise détectée 3 : 1159.0 s → 1166.0 s
+  Crise détectée 3 : 1157.0 s → 1166.0 s
   Crise réelle 1 : 335.0 s → 354.0 s
   Crise réelle 2 : 1151.0 s → 1169.0 s
 
 220121B_D
   Crise détectée 1 : 105.0 s → 120.0 s
-  Crise détectée 2 : 200.0 s → 202.0 s  (fausse alarme)
-  Crise détectée 3 : 335.0 s → 346.0 s
-  Crise détectée 4 : 599.0 s → 615.0 s
+  Crise détectée 2 : 335.0 s → 346.0 s
+  Crise détectée 3 : 598.0 s → 616.0 s
   Crise réelle 1 : 105.0 s → 120.0 s
   Crise réelle 2 : 330.0 s → 348.0 s
   Crise réelle 3 : 598.0 s → 615.0 s
@@ -175,18 +176,18 @@
 230102B_F
   Crise détectée 1 : 59.0 s → 63.0 s
   Crise détectée 2 : 236.0 s → 246.0 s
-  Crise détectée 3 : 279.0 s → 281.0 s
-  Crise détectée 4 : 374.0 s → 378.0 s
-  Crise détectée 5 : 381.0 s → 384.0 s
-  Crise détectée 6 : 454.0 s → 463.0 s
-  Crise détectée 7 : 643.0 s → 654.0 s
-  Crise détectée 8 : 658.0 s → 660.0 s
-  Crise détectée 9 : 964.0 s → 976.0 s
+  Crise détectée 3 : 374.0 s → 378.0 s
+  Crise détectée 4 : 381.0 s → 383.0 s
+  Crise détectée 5 : 455.0 s → 463.0 s
+  Crise détectée 6 : 643.0 s → 654.0 s
+  Crise détectée 7 : 658.0 s → 660.0 s
+  Crise détectée 8 : 964.0 s → 966.0 s
+  Crise détectée 9 : 968.0 s → 974.0 s
   Crise détectée 10 : 1059.0 s → 1076.0 s
   Crise détectée 11 : 1206.0 s → 1220.0 s
   Crise réelle 1 : 58.0 s → 67.0 s
   Crise réelle 2 : 230.0 s → 246.0 s
-  Crise réelle 3 : 277.0 s → 287.0 s
+  Crise réelle 3 : 277.0 s → 287.0 s  (manquée)
   Crise réelle 4 : 373.0 s → 387.0 s
   Crise réelle 5 : 454.0 s → 462.0 s
   Crise réelle 6 : 641.0 s → 661.0 s
@@ -198,7 +199,7 @@
   Crise détectée 1 : 508.0 s → 514.0 s
   Crise détectée 2 : 594.0 s → 599.0 s
   Crise détectée 3 : 616.0 s → 621.0 s
-  Crise détectée 4 : 688.0 s → 697.0 s
+  Crise détectée 4 : 688.0 s → 698.0 s
   Crise détectée 5 : 1454.0 s → 1460.0 s
   Crise détectée 6 : 1494.0 s → 1499.0 s
   Crise détectée 7 : 2887.0 s → 2895.0 s
@@ -211,29 +212,28 @@
   Crise réelle 7 : 2887.0 s → 2894.0 s
 
 230210B_D
-  Crise détectée 1 : 387.0 s → 392.0 s  (fausse alarme)
-  Crise détectée 2 : 398.0 s → 402.0 s  (fausse alarme)
-  Crise détectée 3 : 527.0 s → 531.0 s
-  Crise détectée 4 : 535.0 s → 538.0 s
-  Crise détectée 5 : 541.0 s → 548.0 s
+  Crise détectée 1 : 391.0 s → 402.0 s  (fausse alarme)
+  Crise détectée 2 : 527.0 s → 529.0 s
+  Crise détectée 3 : 533.0 s → 546.0 s
   Crise réelle 1 : 526.0 s → 548.0 s
 
 230224B_B
-  Crise détectée 1 : 181.0 s → 195.0 s
-  Crise détectée 2 : 344.0 s → 347.0 s
-  Crise détectée 3 : 350.0 s → 361.0 s
-  Crise détectée 4 : 1004.0 s → 1018.0 s
+  Crise détectée 1 : 181.0 s → 184.0 s
+  Crise détectée 2 : 192.0 s → 195.0 s
+  Crise détectée 3 : 344.0 s → 347.0 s
+  Crise détectée 4 : 353.0 s → 361.0 s
+  Crise détectée 5 : 1004.0 s → 1007.0 s
+  Crise détectée 6 : 1011.0 s → 1018.0 s
   Crise réelle 1 : 181.0 s → 196.0 s
   Crise réelle 2 : 344.0 s → 360.0 s
   Crise réelle 3 : 1003.0 s → 1018.0 s
 
 230406B_A
   Crise détectée 1 : 166.0 s → 175.0 s
-  Crise détectée 2 : 232.0 s → 234.0 s  (fausse alarme)
-  Crise détectée 3 : 274.0 s → 287.0 s
-  Crise détectée 4 : 840.0 s → 845.0 s
-  Crise détectée 5 : 847.0 s → 850.0 s
-  Crise détectée 6 : 1063.0 s → 1073.0 s
+  Crise détectée 2 : 274.0 s → 287.0 s
+  Crise détectée 3 : 840.0 s → 845.0 s
+  Crise détectée 4 : 847.0 s → 849.0 s
+  Crise détectée 5 : 1063.0 s → 1073.0 s
   Crise réelle 1 : 166.0 s → 175.0 s
   Crise réelle 2 : 275.0 s → 286.0 s
   Crise réelle 3 : 840.0 s → 850.0 s
@@ -241,25 +241,31 @@
 
 230515B_G
   Crise détectée 1 : 353.0 s → 367.0 s
-  Crise détectée 2 : 431.0 s → 445.0 s
+  Crise détectée 2 : 432.0 s → 445.0 s
   Crise réelle 1 : 353.0 s → 366.0 s
   Crise réelle 2 : 430.0 s → 451.0 s
 
 230519A_E
   Crise détectée 1 : 1037.0 s → 1050.0 s
-  Crise détectée 2 : 1115.0 s → 1130.0 s
+  Crise détectée 2 : 1115.0 s → 1131.0 s
   Crise réelle 1 : 1036.0 s → 1052.0 s
   Crise réelle 2 : 1114.0 s → 1133.0 s
 
 230718A_A
   Crise détectée 1 : 2.0 s → 4.0 s  (fausse alarme)
-  Crise détectée 2 : 71.0 s → 75.0 s
-  Crise détectée 3 : 743.0 s → 745.0 s
-  Crise détectée 4 : 974.0 s → 976.0 s
+  Crise détectée 2 : 61.0 s → 63.0 s
+  Crise détectée 3 : 71.0 s → 74.0 s
+  Crise détectée 4 : 182.0 s → 184.0 s  (fausse alarme)
+  Crise détectée 5 : 186.0 s → 188.0 s  (fausse alarme)
+  Crise détectée 6 : 302.0 s → 304.0 s
+  Crise détectée 7 : 740.0 s → 744.0 s
+  Crise détectée 8 : 974.0 s → 976.0 s
+  Crise détectée 9 : 979.0 s → 982.0 s
+  Crise détectée 10 : 1108.0 s → 1110.0 s
   Crise réelle 1 : 61.0 s → 75.0 s
   Crise réelle 2 : 218.0 s → 222.0 s  (manquée)
-  Crise réelle 3 : 302.0 s → 313.0 s  (manquée)
+  Crise réelle 3 : 302.0 s → 313.0 s
   Crise réelle 4 : 430.0 s → 441.0 s  (manquée)
   Crise réelle 5 : 737.0 s → 745.0 s
   Crise réelle 6 : 974.0 s → 986.0 s
-  Crise réelle 7 : 1103.0 s → 1110.0 s  (manquée)
+  Crise réelle 7 : 1103.0 s → 1110.0 s

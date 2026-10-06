@@ -266,7 +266,7 @@ def write_report(
         "Modèle : Random Forest (hyperparamètres par défaut, entraînement non équilibré) sur le jeu officiel filtré. "
         "Toutes les probabilités utilisées ici sont **hors-pli** : `GroupKFold` à 5 plis par enregistrement (mêmes plis qu’en Partie IX), "
         "donc chaque fenêtre est prédite par un modèle qui n’a jamais vu son enregistrement. "
-        "Le modèle final, entraîné sur les 21 enregistrements, est sauvegardé dans `models/rf_final.joblib` avec la liste des 144 caractéristiques; "
+        "Le modèle final, entraîné sur les 21 enregistrements, est sauvegardé dans `models/rf_final.joblib` avec la liste de ses caractéristiques; "
         "il sert aux futurs enregistrements, pas à l’évaluation.",
         "",
         "## Partie X — Des fenêtres aux intervalles",

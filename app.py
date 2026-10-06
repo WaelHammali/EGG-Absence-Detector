@@ -34,6 +34,12 @@ try:
 except app_data.MissingData as error:
     DATA, LOAD_ERROR = None, str(error)
 
+# Channel selector grouped by scalp region; the curves themselves stay in 10-20 order.
+REGION_NAMES = {"Fp": "Frontal", "F": "Frontal", "C": "Central", "T": "Temporal", "P": "Parietal", "O": "Occipital"}
+CHANNEL_GROUPS = [
+    {"group": region, "items": [channel for channel in CHANNELS if REGION_NAMES[channel.rstrip("0123456789z")] == region]}
+    for region in ("Frontal", "Central", "Temporal", "Parietal", "Occipital")
+]
 GREEK = {"Delta": "δ", "Theta": "θ", "Alpha": "α", "Beta": "β"}
 # URL values for ?page=…, including the names used before the app was split in three parts.
 PAGES = {
@@ -96,7 +102,7 @@ STATUS = {
 
 def status_badge(status: str):
     label, color, icon_name = STATUS[status]
-    return dmc.Badge(label, color=color, variant="light", leftSection=icon(icon_name, 12), radius="sm", miw=112, style={"flexShrink": 0})
+    return dmc.Badge(label, color=color, variant="light", leftSection=icon(icon_name, 12), radius="sm", miw=112, style={"flexShrink": 0}, styles={"label": {"overflow": "visible"}})
 
 
 def interval(start, end) -> str:
@@ -254,16 +260,16 @@ def sidebar():
                                     [
                                         dmc.Text("Channels", size="sm", fw=500),
                                         tip(
-                                            "Show all eight channels again.",
+                                            "Show every channel again.",
                                             dmc.Button("Show all", id="all-channels", variant="subtle", size="compact-xs", leftSection=icon("tabler:list-check", 12)),
                                         ),
                                     ],
                                     justify="space-between", mb=-8,
                                 ),
                                 wide_tip(
-                                    "Curves to display: remove a channel with its ×, or pick one from the list to add it back.",                                    html.Div(
+                                    "Curves to display, listed by scalp region: remove a channel with its ×, or pick one from the list to add it back.",                                    html.Div(
                                         dmc.MultiSelect(
-                                            id="channels", data=list(CHANNELS), value=list(CHANNELS), clearable=False,
+                                            id="channels", data=CHANNEL_GROUPS, value=list(CHANNELS), clearable=False, maxDropdownHeight=320,
                                             leftSection=icon("tabler:wave-sine", 16), comboboxProps={"withinPortal": True},
                                         )
                                     ),
@@ -716,7 +722,7 @@ def verdict(model: str, threshold: float, metrics: dict):
                         [
                             dmc.Badge(f"{metrics['tp']} found", color="teal", variant="light", leftSection=icon("tabler:check", 12)),
                             dmc.Badge(f"{metrics['fn']} missed", color="gray", variant="light", leftSection=icon("tabler:eye-off", 12)),
-                            dmc.Badge(f"{metrics['fp']} false alarms", color="red", variant="light", leftSection=icon("tabler:alert-triangle", 12)),
+                            dmc.Badge(f"{metrics['fp']} false alarm{'s' if metrics['fp'] != 1 else ''}", color="red", variant="light", leftSection=icon("tabler:alert-triangle", 12)),
                         ],
                         gap="xs",
                     ),

@@ -16,6 +16,8 @@ from sklearn.metrics import roc_auc_score
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from src.io import CHANNELS
+
 
 METADATA = {"recording", "subject", "window", "start_s", "end_s", "class"}
 Q10_FEATURES = [
@@ -160,7 +162,7 @@ def heatmaps(correlation: pd.DataFrame, average_columns: list[str], output_dir: 
         cmap="vlag", center=0, vmin=-1, vmax=1, annot=True, fmt=".2f", ax=axis,
         cbar_kws={"label": label},
     )
-    axis.set_title(f"Q11 — Corrélation ({label}) des caractéristiques moyennes sur les 8 canaux")
+    axis.set_title(f"Q11 — Corrélation ({label}) des caractéristiques moyennes sur les {len(CHANNELS)} canaux")
     figure.savefig(output_dir / f"correlation_average_features{suffix}.png", dpi=180)
     plt.close(figure)
 
@@ -178,7 +180,7 @@ def heatmaps(correlation: pd.DataFrame, average_columns: list[str], output_dir: 
     groups = [feature_names[int(start)] for start in [0, *boundaries]]
     axis.set_xticks(centers, groups, rotation=90)
     axis.set_yticks(centers, groups, rotation=0)
-    axis.set_title(f"Q11 — Matrice de corrélation ({label}) des {len(ordered)} caractéristiques (8 canaux + moyenne par bloc)")
+    axis.set_title(f"Q11 — Matrice de corrélation ({label}) des {len(ordered)} caractéristiques ({len(CHANNELS)} canaux + moyenne par bloc)")
     figure.savefig(output_dir / f"correlation_all_features{suffix}.png", dpi=160)
     plt.close(figure)
 

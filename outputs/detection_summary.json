@@ -1,40 +1,40 @@
 {
   "model": "RandomForestClassifier (default hyperparameters, unbalanced training)",
   "predictions": "out-of-fold, GroupKFold by recording (5 folds)",
-  "threshold": 0.68,
+  "threshold": 0.67,
   "min_gap_s": 2.0,
   "min_duration_s": 2.0,
-  "detections": 129,
+  "detections": 135,
   "recorded_hours": 8.733333333333333,
   "false_alarms_per_hour": 2.9770992366412217,
-  "false_in_hpn": 15,
+  "false_in_hpn": 12,
   "event": {
-    "tp": 86,
-    "fn": 7,
+    "tp": 87,
+    "fn": 6,
     "fp": 26,
-    "precision": 0.7984496124031008,
-    "recall": 0.9247311827956989,
-    "f1": 0.856963188700237,
-    "onset_error_mean_s": 1.1395348837209303,
+    "precision": 0.8074074074074075,
+    "recall": 0.9354838709677419,
+    "f1": 0.8667397861255827,
+    "onset_error_mean_s": 0.896551724137931,
     "onset_error_abs_median_s": 1.0,
-    "offset_error_mean_s": -1.186046511627907,
+    "offset_error_mean_s": -1.4597701149425288,
     "offset_error_abs_median_s": 1.0
   },
   "event_at_0.50": {
-    "tp": 90,
-    "fn": 3,
-    "fp": 40,
-    "precision": 0.726027397260274,
-    "recall": 0.967741935483871,
-    "f1": 0.8296373597704149
+    "tp": 91,
+    "fn": 2,
+    "fp": 41,
+    "precision": 0.722972972972973,
+    "recall": 0.978494623655914,
+    "f1": 0.8315470344591999
   },
   "window": {
-    "tp": 658,
-    "fp": 114,
-    "fn": 586,
-    "tn": 30061,
-    "precision": 0.8523316062176166,
-    "recall": 0.5289389067524116,
-    "f1": 0.6527777777777778
+    "tp": 645,
+    "fp": 119,
+    "fn": 599,
+    "tn": 30056,
+    "precision": 0.8442408376963351,
+    "recall": 0.5184887459807074,
+    "f1": 0.6424302788844621
   }
 }

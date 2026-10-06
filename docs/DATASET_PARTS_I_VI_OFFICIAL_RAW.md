@@ -1,6 +1,6 @@
 # Dataset report — Official annotations (unfiltered)
 
-The dataset contains 2 s windows (512 samples at 256 Hz) with a 1 s hop. A window is positive when at least 256 samples are inside a seizure interval. Features use Fp1, Fp2, C3, C4, T3, T4, O1 and O2.
+The dataset contains 2 s windows (512 samples at 256 Hz) with a 1 s hop. A window is positive when at least 256 samples are inside a seizure interval. Features use the 19 EEG channels Fp1, Fp2, F7, F3, Fz, F4, F8, T3, C3, Cz, C4, T4, T5, P3, Pz, P4, T6, O1, O2; ECG, EMG and SLI are not used.
 
 No filtering is applied: features are computed on the raw signal, including each recording's DC offset.
 

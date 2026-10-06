@@ -14,7 +14,7 @@ data/excel/*.xlsx + data/processed/<recording>.parquet
 data/processed/windows_features.parquet
 ```
 
-Only Fp1, Fp2, C3, C4, T3, T4, O1 and O2 are used. EEG amplitudes and feature arrays are stored as `float32`. ECG, EMG and SLI are excluded.
+The 19 EEG channels of the 10-20 montage are used (Fp1, Fp2, F7, F3, Fz, F4, F8, T3, C3, Cz, C4, T4, T5, P3, Pz, P4, T6, O1, O2), selected by name; every annotated recording has all of them. ECG, EMG and SLI are excluded. EEG amplitudes and feature arrays are stored as `float32`. The earlier 8-channel results are kept in `outputs/archive_8ch/` and compared in [`docs/CHANNELS_8_VS_19.md`](docs/CHANNELS_8_VS_19.md) (`python scripts/compare_channel_sets.py`).
 
 ## Setup
 
@@ -84,7 +84,7 @@ Open <http://127.0.0.1:8050>. Nothing is trained at startup. If a precomputed fi
 
 The app has three parts, chosen in the header, and one patient selector in the sidebar:
 
-- **Visualisation**: the data only. Choose the patient and which channels to show (remove a channel with its ×, "Show all" brings the eight back; stacked or overlaid). Each curve turns green during a real seizure, a diamond marks each seizure start, and the bottom curve is 1 during a seizure and 0 otherwise. A table lists the real seizures.
+- **Visualisation**: the data only. Choose the patient and which of the 19 channels to show (the list is grouped by scalp region; remove a channel with its ×, "Show all" brings them all back; stacked in 10-20 order or overlaid). Each curve turns green during a real seizure, a diamond marks each seizure start, and the bottom curve is 1 during a seizure and 0 otherwise. A table lists the real seizures.
 - **Prediction**: choose one of the four trained models (Decision Tree, Random Forest, KNN, SVM) and see its probability, its detections against the real seizures, a verdict for this patient (found, missed, false alarms) and the table of real vs predicted intervals. The threshold slider updates everything live; each model starts at its own best threshold.
 - **Comparison**: the four models together, with no model to choose. "Selected patient" shows, for the patient in the sidebar, a table (seizures found, missed, false alarms, scores) and a timeline with the real seizures on the first row and one row of detections per model. "All patients" shows the overall scores, a bar chart of F1, recall and precision, and a table of every patient against every model.
 - Common controls: page length, gain, page buttons or the ← → keys, jump to previous/next seizure, technician notes, the spectrum of any clicked 2 s window, "Save view as PNG" and "Download intervals CSV".
