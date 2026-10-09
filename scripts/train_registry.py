@@ -1,14 +1,19 @@
-"""Train the 8 selectable models: 4 algorithms x 2 training modes.
+"""Train the selectable models: 4 algorithms x 3 training modes.
 
 For every model: out-of-fold probabilities with GroupKFold by recording (the same 5 folds as
 the other parts), the threshold maximizing event-level F1, scores at that threshold and at
 0.50, and a final model trained on all recordings. Balanced training keeps every class-1
-training window plus as many random class-0 windows; test data always keeps real proportions.
+training window plus as many random class-0 windows. Augmented training adds the extra seizure
+windows of scripts/build_augmented.py for the training recordings only. Test data always keeps
+real proportions and real windows.
+
+--modes trains only some modes and keeps the other models of the existing registry.
 
 Outputs: outputs/predictions/<algo>_<mode>.parquet, models/<algo>_<mode>.joblib and
 models/registry.json.
 """
 
+from argparse import ArgumentParser
 from pathlib import Path
 import json
 import sys
@@ -34,7 +39,8 @@ ANNOTATIONS = ROOT / "data/interim/official/annotations_clean.csv"
 PREDICTIONS = ROOT / "outputs/predictions"
 MODELS = ROOT / "models"
 ALGORITHMS = {"dt": "Decision Tree", "rf": "Random Forest", "knn": "KNN", "svm": "SVM"}
-MODES = ("unbalanced", "balanced")
+AUGMENTED = ROOT / "data/processed/windows_features_official_augmented.parquet"
+MODES = ("unbalanced", "balanced", "augmented")
 BALANCED_SEEDS = (0, 1, 2, 3, 4)
 SAVED_SEED = 0
 # Up to 0.99: models trained on balanced data need high thresholds on real proportions.
@@ -49,11 +55,12 @@ def pipeline(algorithm: str):
     return estimator
 
 
-def out_of_fold(algorithm: str, X, y, groups, seed: int | None) -> tuple[np.ndarray, np.ndarray, list[float], dict]:
+def out_of_fold(algorithm: str, X, y, groups, seed: int | None, extra=None) -> tuple[np.ndarray, np.ndarray, list[float], dict]:
     """Probabilities for every window from models that never saw its recording.
 
     ``seed`` selects balanced training (undersampling of each training fold); None keeps
-    the training folds as they are.
+    the training folds as they are. ``extra`` = (features, recordings) of augmented class-1
+    windows: those of the training recordings are added to each training fold.
     """
     proba = np.full(len(y), np.nan)
     fold_of = np.zeros(len(y), dtype=np.int8)
@@ -62,12 +69,17 @@ def out_of_fold(algorithm: str, X, y, groups, seed: int | None) -> tuple[np.ndar
         assert not set(groups[train]) & set(groups[test])
         if seed is not None:
             train = train[undersample(y[train], seed)]
+        X_train, y_train = X[train], y[train]
+        if extra is not None:
+            added = extra[0][np.isin(extra[1], groups[train])]
+            assert not set(extra[1][np.isin(extra[1], groups[train])]) & set(groups[test])
+            X_train, y_train = np.vstack([X_train, added]), np.r_[y_train, np.ones(len(added), dtype=y.dtype)]
         started = time.perf_counter()
-        fitted = pipeline(algorithm).fit(X[train], y[train])
+        fitted = pipeline(algorithm).fit(X_train, y_train)
         seconds.append(time.perf_counter() - started)
         proba[test] = fitted.predict_proba(X[test])[:, 1]
         fold_of[test] = fold
-        sizes.append((len(train), int(y[train].sum())))
+        sizes.append((len(y_train), int(y_train.sum())))
     windows = float(np.mean([size for size, _ in sizes]))
     positives = float(np.mean([count for _, count in sizes]))
     training = {"windows": windows, "class_1": positives, "class_0": windows - positives, "class_1_share": positives / windows}
@@ -101,6 +113,9 @@ def best_threshold(table: pd.DataFrame, annotations: pd.DataFrame) -> float:
 
 
 def main() -> None:
+    parser = ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--modes", nargs="+", choices=MODES, default=list(MODES), help="Training modes to train (default: all)")
+    selected = parser.parse_args().modes
     frame = pd.read_parquet(DATASET)
     features = [column for column in frame.columns if column not in METADATA]
     X = frame[features].to_numpy(dtype=np.float64)
@@ -109,6 +124,12 @@ def main() -> None:
     annotations = pd.read_csv(ANNOTATIONS)
     hours = float(frame.groupby("recording")["end_s"].max().sum() / 3600)
     reference = frame[["recording", "window", "start_s", "end_s"]].assign(true_class=frame["class"].astype(np.uint8))
+    extra = None
+    if "augmented" in selected:
+        if not AUGMENTED.exists():
+            raise SystemExit(f"{AUGMENTED.relative_to(ROOT)} not found: run python scripts/build_augmented.py")
+        augmented = pd.read_parquet(AUGMENTED)
+        extra = (augmented[features].to_numpy(dtype=np.float64), augmented["recording"].to_numpy())
     PREDICTIONS.mkdir(parents=True, exist_ok=True)
     MODELS.mkdir(parents=True, exist_ok=True)
 
@@ -119,19 +140,26 @@ def main() -> None:
         "preprocessing": describe("bandpass"),
         "validation": "GroupKFold by recording, 5 folds; out-of-fold predictions",
         "balanced_training": "random undersampling of each training fold: all class-1 windows + as many class-0 windows",
+        "augmented_training": "extra class-1 windows of the training recordings (0.25 s shifts and left-right mirror), from scripts/build_augmented.py",
+        "augmented_dataset": str(AUGMENTED.relative_to(ROOT)),
         "balanced_seeds": list(BALANCED_SEEDS),
         "saved_seed": SAVED_SEED,
         "recorded_hours": hours,
         "sklearn_version": sklearn.__version__,
         "models": {},
     }
+    previous = json.loads((MODELS / "registry.json").read_text())["models"] if (MODELS / "registry.json").exists() else {}
     for algorithm, name in ALGORITHMS.items():
         for mode in MODES:
             key = f"{algorithm}_{mode}"
+            if mode not in selected:
+                if key in previous:
+                    registry["models"][key] = previous[key]
+                continue
             seeds = BALANCED_SEEDS if mode == "balanced" else (None,)
             runs = []
             for seed in seeds:
-                proba, fold_of, seconds, training = out_of_fold(algorithm, X, y, groups, seed)
+                proba, fold_of, seconds, training = out_of_fold(algorithm, X, y, groups, seed, extra if mode == "augmented" else None)
                 table = reference.assign(fold=fold_of, proba=proba.astype(np.float32))
                 threshold = best_threshold(table, annotations)
                 runs.append(
@@ -145,8 +173,11 @@ def main() -> None:
 
             # Final model on all recordings, with the same undersampling seed as the saved predictions.
             rows = undersample(y, SAVED_SEED) if mode == "balanced" else np.arange(len(y))
+            X_final, y_final = X[rows], y[rows]
+            if mode == "augmented":
+                X_final, y_final = np.vstack([X_final, extra[0]]), np.r_[y_final, np.ones(len(extra[0]), dtype=y.dtype)]
             started = time.perf_counter()
-            final = pipeline(algorithm).fit(X[rows], y[rows])
+            final = pipeline(algorithm).fit(X_final, y_final)
             final_seconds = time.perf_counter() - started
             joblib.dump(
                 {

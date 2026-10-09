@@ -370,10 +370,10 @@ ALGORITHM_COLORS = {
 
 
 def model_style(model: str, theme: str) -> dict:
-    """Color by algorithm; solid for unbalanced training, dashed / hatched for balanced."""
+    """Color by algorithm; solid for unbalanced training, dashed / hatched for balanced, dotted for augmented."""
     algorithm, mode = model.split("_")
-    balanced = mode == "balanced"
-    return {"color": ALGORITHM_COLORS[theme][algorithm], "dash": "dash" if balanced else "solid", "pattern": "/" if balanced else ""}
+    dash, pattern = {"unbalanced": ("solid", ""), "balanced": ("dash", "/"), "augmented": ("dot", ".")}[mode]
+    return {"color": ALGORITHM_COLORS[theme][algorithm], "dash": dash, "pattern": pattern}
 
 
 def training_distribution_figure(rows: list[tuple[str, dict]], theme: str) -> go.Figure:

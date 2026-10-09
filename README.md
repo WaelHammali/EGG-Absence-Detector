@@ -1,6 +1,6 @@
 # EGG-Absence-Detector
 
-Automatic detection of absence-seizure periods from EEG. The current pipeline reads MATLAB timetables, aligns clock-time annotations, labels samples, creates overlapping windows, and extracts time- and frequency-domain features. Model training is intentionally deferred until the dataset report is reviewed.
+Automatic detection of absence-seizure periods from EEG. The current pipeline reads MATLAB timetables, aligns clock-time annotations, labels samples, creates overlapping windows, and extracts time- and frequency-domain features. Four algorithms are then trained in three training modes and compared on seizure detection; a Dash app shows the signals, the predictions and the comparison.
 
 ## Data flow
 
@@ -62,18 +62,19 @@ python scripts/train_models.py                                               # d
 
 `--skip-conversion` reuses the labeled per-recording Parquet files after checking their labels against the current annotations. Reports: [`docs/DATASET_PARTS_I_VI_OFFICIAL.md`](docs/DATASET_PARTS_I_VI_OFFICIAL.md), [`docs/PART_VII_ANALYSIS_OFFICIAL.md`](docs/PART_VII_ANALYSIS_OFFICIAL.md), [`docs/PARTS_VIII_IX.md`](docs/PARTS_VIII_IX.md).
 
-Temporal detection (Parts X–XI, Random Forest) and the 8 selectable models:
+Temporal detection (Parts X–XI, Random Forest) and the 12 selectable models:
 
 ```bash
 python scripts/predict_oof.py          # Part X: out-of-fold Random Forest predictions, models/rf_final.joblib
-python scripts/train_registry.py       # 8 models = DT, RF, KNN, SVM x unbalanced, balanced (about 25 minutes)
+python scripts/build_augmented.py      # extra seizure windows for the augmented mode, in their own file
+python scripts/train_registry.py       # 12 models = DT, RF, KNN, SVM x unbalanced, balanced, augmented [--modes augmented]
 python scripts/prepare_app_data.py     # filtered signals, reference channels, metadata, technician events, comparison curves
 python scripts/evaluate_detection.py   # Part X-XI: threshold, outputs/detected_intervals.csv, figures, docs/PARTS_X_XI.md
 python scripts/compare_models.py       # docs/MODEL_COMPARISON.md
-python scripts/detect.py --recording 190304A_E [--algo dt|rf|knn|svm] [--mode unbalanced|balanced] [--threshold 0.5]
+python scripts/detect.py --recording 190304A_E [--algo dt|rf|knn|svm] [--mode unbalanced|balanced|augmented] [--threshold 0.5]
 ```
 
-`train_registry.py` writes `outputs/predictions/<algo>_<mode>.parquet` (out-of-fold probabilities, GroupKFold by recording), `models/<algo>_<mode>.joblib` (final models on all 21 recordings) and `models/registry.json` (features, best threshold and scores of each model, default model). Balanced training undersamples the training folds only (all seizure windows + as many normal windows, 5 seeds); test data always keeps the real proportions. The model files are not in git (the KNN one is 72 MB): rebuild them with the script.
+`train_registry.py` writes `outputs/predictions/<algo>_<mode>.parquet` (out-of-fold probabilities, GroupKFold by recording), `models/<algo>_<mode>.joblib` (final models on all 21 recordings) and `models/registry.json` (features, best threshold and scores of each model, default model). Balanced training undersamples the training folds only (all seizure windows + as many normal windows, 5 seeds). Augmented training keeps the whole training fold and adds extra seizure windows of the training recordings only: windows shifted by 0.25, 0.5 and 0.75 s and the left-right mirror of every seizure window (Fp1↔Fp2, F7↔F8, ...). These 8,230 windows are built by `build_augmented.py` into `data/processed/windows_features_official_augmented.parquet`; the official dataset is not changed. Test data always keeps the real proportions and the original windows. `--modes` retrains only the given modes and keeps the other models of the registry. The model files are not in git (the KNN one is 72 MB): rebuild them with the script.
 
 ## How to run the app
 
@@ -89,15 +90,15 @@ Open <http://127.0.0.1:8050>. Nothing is trained at startup. If a precomputed fi
 The app opens in a light theme; the moon/sun button in the header switches to the dark theme. It has three parts, chosen with the tabs in the header, and one patient selector in the sidebar (with the patient's sex, age, recording duration and number of real seizures).
 
 - **Visualisation**: the data only. The 19 channels are toggle chips grouped by scalp region (click a channel to hide or show it; "Show all" brings them all back), stacked in 10-20 order or overlaid. Each curve turns green during a real seizure, a diamond marks each seizure start, and the bottom curve is "yes" during a seizure and "no" otherwise. The plot fills the window: on a 1920×1080 screen the 19 channels, the bottom row and the navigator are visible together without scrolling.
-- **Prediction**: the model chosen in the header (Algorithm: DT / RF / KNN / SVM, Training mode: Unbalanced / Balanced). A summary line gives the verdict for this patient (found, missed, false alarms) and, on the right, the model's scores on all patients. The plot adds the model's probability, its detections and the threshold line. The threshold slider is in the sidebar; each model starts at its own best threshold and everything updates live.
-- **Comparison**: read from top to bottom. *Who wins*: the best of the compared models in a larger card with the reason in one sentence, then the others in rank order. *Why*: event F1 against the threshold, precision-recall curves and the training class distribution. *Detail*: sortable ranking with the best values highlighted, confusion matrices, a timeline of the selected patient (real seizures + one row per model) and event F1 per patient. "Same training mode", "Same algorithm, both modes", "All models" or any custom list choose what is compared. One color per algorithm; solid = unbalanced, dashed or hatched = balanced.
+- **Prediction**: the model chosen in the header (Algorithm: DT / RF / KNN / SVM, Training mode: Unbalanced / Balanced / Augmented). A summary line gives the verdict for this patient (found, missed, false alarms) and, on the right, the model's scores on all patients. The plot adds the model's probability, its detections and the threshold line. The threshold slider is in the sidebar; each model starts at its own best threshold and everything updates live.
+- **Comparison**: read from top to bottom. *Who wins*: the best of the compared models in a larger card with the reason in one sentence, then the others in rank order. *Why*: event F1 against the threshold, precision-recall curves and the training class distribution. *Detail*: sortable ranking with the best values highlighted, confusion matrices, a timeline of the selected patient (real seizures + one row per model) and event F1 per patient. "Same training mode", "Same algorithm, all modes", "All models" or any custom list choose what is compared. One color per algorithm; solid = unbalanced, dashed or hatched = balanced, dotted = augmented.
 - Plot toolbar: previous/next page (also the ← → keys), previous/next seizure, **Spectrum** (the frequency content of a 2 s window; it also opens when you click a curve), **Intervals** (table of the real seizures, with the model's detections in Prediction), "Save view as PNG" and "Download intervals CSV". Spectrum and Intervals open in a side panel so the plot keeps its place.
 - Sidebar view controls: stacked / overlay, page length (10 s, 30 s, 60 s, full), gain, technician notes, and reference channels (ECG, EMG, SLI drawn in gray, labeled "reference — not used by the model"; they are never features).
 - `?theme=dark&page=prediction&recording=211104B_D` in the URL opens a given state directly.
 
 All probabilities shown are out-of-fold: each recording is scored by a model that never saw it. Fonts (Google Fonts) and icons (Iconify) are loaded from the internet; offline, the app falls back to system fonts and icons are not drawn. Screenshots in `outputs/figures/app/` (1920×1080, 1440×900 and 1280×800, both themes) are produced by `python scripts/screenshot_app.py`; `outputs/figures/app/before/` keeps the previous design for comparison. The design is described in [`docs/design/REDESIGN_PROPOSAL.md`](docs/design/REDESIGN_PROPOSAL.md).
 
-The provisional counts and feature definition are documented in [`docs/DATASET_PARTS_I_VI.md`](docs/DATASET_PARTS_I_VI.md). `200625A_F` and `210427B_C` are excluded for the reasons recorded in `data/interim/exclusions.csv`.
+The provisional counts and feature definition are documented in [`docs/DATASET_PARTS_I_VI.md`](docs/DATASET_PARTS_I_VI.md). In the provisional build `200625A_F` and `210427B_C` are excluded for the reasons recorded in `data/interim/exclusions.csv`; the official build includes `210427B_C`.
 
 ## Project structure
 

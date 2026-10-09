@@ -28,7 +28,7 @@ REQUIRED = {
 }
 ALGORITHMS = {"dt": "Decision Tree", "rf": "Random Forest", "knn": "KNN", "svm": "SVM"}
 ALGORITHM_SHORT = {"dt": "DT", "rf": "RF", "knn": "KNN", "svm": "SVM"}
-MODES = {"unbalanced": "Unbalanced", "balanced": "Balanced"}
+MODES = {"unbalanced": "Unbalanced", "balanced": "Balanced", "augmented": "Augmented"}
 
 
 class MissingData(Exception):

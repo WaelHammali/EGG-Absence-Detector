@@ -12,6 +12,7 @@ data/excel/
 data/processed/
 /Annotations MAJ.xlsx
 
-# The 8 registered models are rebuilt by scripts/train_registry.py (the KNN file alone is 72 MB)
+# The registered models are rebuilt by scripts/train_registry.py (the KNN file alone is 72 MB)
 models/*_balanced.joblib
 models/*_unbalanced.joblib
+models/*_augmented.joblib

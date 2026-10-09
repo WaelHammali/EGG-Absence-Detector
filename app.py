@@ -181,7 +181,7 @@ def header():
                                 ),
                             ),
                             tip(
-                                "Training mode: Unbalanced trains on the real class proportions (about 96 % / 4 %); Balanced trains on as many normal windows as seizure windows (50 / 50).",
+                                "Training mode: Unbalanced trains on the real class proportions (about 96 % / 4 %); Balanced trains on as many normal windows as seizure windows (50 / 50); Augmented adds shifted and left-right mirrored copies of the training seizure windows (about 76 % / 24 %).",
                                 dmc.SegmentedControl(
                                     id="train-mode", value=DATA.default_model.split("_")[1], withItemsBorders=False, **segment,
                                     data=[{"value": key, "label": label} for key, label in app_data.MODES.items()],
@@ -374,12 +374,12 @@ def comparison_page():
                             [
                                 html.Span("Compare", className="card-title"),
                                 tip(
-                                    "Same training mode compares the 4 algorithms; Same algorithm compares unbalanced with balanced; All models shows the 8; Custom keeps the list you edit.",
+                                    "Same training mode compares the 4 algorithms; Same algorithm compares its training modes; All models shows the 12; Custom keeps the list you edit.",
                                     dmc.SegmentedControl(
                                         id="cmp-preset", value="mode", radius="md", size="sm", withItemsBorders=False,
                                         data=[
                                             {"value": "mode", "label": "Same training mode"},
-                                            {"value": "algorithm", "label": "Same algorithm, both modes"},
+                                            {"value": "algorithm", "label": "Same algorithm, all modes"},
                                             {"value": "all", "label": "All models"},
                                             {"value": "custom", "label": "Custom"},
                                         ],
@@ -397,7 +397,7 @@ def comparison_page():
                                 ),
                                 html.Div(
                                     tip(
-                                        "Algorithm whose two training modes are compared.",
+                                        "Algorithm whose training modes are compared.",
                                         dmc.SegmentedControl(
                                             id="cmp-algo", value="rf", radius="md", size="sm", withItemsBorders=False,
                                             data=[{"value": key, "label": label} for key, label in app_data.ALGORITHM_SHORT.items()],
@@ -711,7 +711,7 @@ def verdict_label(metrics: dict) -> tuple[str, str, str]:
 def model_swatch(model: str, theme: str, width: int = 22):
     """Small line in the model's color and style, so identity never relies on the name alone."""
     style = model_style(model, theme)
-    line = "dashed" if style["dash"] == "dash" else "solid"
+    line = {"dash": "dashed", "dot": "dotted"}.get(style["dash"], "solid")
     return html.Span(style={"display": "inline-block", "width": width, "borderTop": f"3px {line} {style['color']}", "verticalAlign": "middle", "marginRight": 8})
 
 

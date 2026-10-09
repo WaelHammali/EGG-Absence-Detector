@@ -2,7 +2,7 @@
 
 Filtered EEG signals, reference channels (ECG, EMG, SLI: shown in the app, never used as
 features), recording metadata, technician events and, when the model registry exists, the
-comparison curves of the 8 models. Run after scripts/train_registry.py.
+comparison curves of the registered models. Run after scripts/train_registry.py.
 """
 
 from pathlib import Path

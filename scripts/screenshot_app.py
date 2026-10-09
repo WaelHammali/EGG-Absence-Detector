@@ -1,7 +1,7 @@
 """Take screenshots of the app as it appears on screen (outputs/figures/app/).
 
 Three window sizes (1920x1080, 1440x900, 1280x800), both themes, the three parts, plus the
-side panels, overlay mode, reference channels, the empty state and the 8-model comparison.
+side panels, overlay mode, reference channels, the empty state and the all-model comparison.
 Starts app.py on a free port, drives it with headless Chromium, then stops it.
 Requires `pip install selenium` and a system chromium + chromedriver.
 """

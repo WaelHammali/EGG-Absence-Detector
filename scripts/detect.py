@@ -1,7 +1,7 @@
 """Print detected seizure intervals for one recording and compare them with the annotations.
 
 Uses the out-of-fold probabilities, i.e. predictions from a model that never saw the recording.
-Choose one of the 8 registered models with --algo and --mode; without them the default model
+Choose one of the registered models with --algo and --mode; without them the default model
 of models/registry.json (best event-level F1) is used.
 """
 
@@ -26,7 +26,7 @@ def main() -> None:
     parser = ArgumentParser(description=__doc__)
     parser.add_argument("--recording", required=True, help="Recording ID, e.g. 190304A_E")
     parser.add_argument("--algo", choices=["dt", "rf", "knn", "svm"], help="Algorithm (default: the registry's default model)")
-    parser.add_argument("--mode", choices=["unbalanced", "balanced"], help="Training mode (default: the registry's default model)")
+    parser.add_argument("--mode", choices=["unbalanced", "balanced", "augmented"], help="Training mode (default: the registry's default model)")
     parser.add_argument("--threshold", type=float, help="Probability threshold (default: the model's best event-F1 threshold)")
     args = parser.parse_args()
     if not REGISTRY.exists():
@@ -51,7 +51,7 @@ def main() -> None:
     metrics = event_metrics(matches, len(detected))
     false_starts = set(matches.loc[matches["status"] == "FP", "detected_start_s"])
 
-    mode = {"unbalanced": "non équilibré", "balanced": "équilibré"}[entry["mode"]]
+    mode = {"unbalanced": "non équilibré", "balanced": "équilibré", "augmented": "augmenté"}[entry["mode"]]
     print(f"Enregistrement {args.recording} — {entry['algorithm_name']}, entraînement {mode} — seuil {threshold:.2f} (probabilités hors-pli)")
     print()
     if detected.empty:

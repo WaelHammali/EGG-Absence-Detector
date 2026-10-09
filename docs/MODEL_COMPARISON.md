@@ -1,10 +1,11 @@
-# Comparaison des 8 modèles
+# Comparaison des 12 modèles
 
-8 modèles = 4 algorithmes (Decision Tree, Random Forest, KNN, SVM) × 2 modes d’entraînement, sur le jeu officiel filtré à 19 canaux EEG (320 caractéristiques). Hyperparamètres par défaut de scikit-learn; `StandardScaler` pour KNN et SVM.
+12 modèles = 4 algorithmes (Decision Tree, Random Forest, KNN, SVM) × 3 modes d’entraînement, sur le jeu officiel filtré à 19 canaux EEG (320 caractéristiques). Hyperparamètres par défaut de scikit-learn; `StandardScaler` pour KNN et SVM.
 
 - **Non équilibré** : chaque pli d’entraînement est utilisé tel quel.
 - **Équilibré** : sous-échantillonnage aléatoire du pli d’entraînement seulement : toutes les fenêtres de classe 1 + autant de fenêtres de classe 0 tirées au hasard (50/50). Répété avec 5 graines (0, 1, 2, 3, 4); la graine 0 sert aux prédictions et aux modèles sauvegardés.
-- **Test** : toujours les proportions réelles. `GroupKFold` à 5 plis par enregistrement (mêmes plis partout) : chaque fenêtre est prédite par un modèle qui n’a jamais vu son enregistrement.
+- **Augmenté** : le pli d’entraînement complet + des fenêtres de crise supplémentaires tirées du signal réel des enregistrements d’entraînement seulement : fenêtres décalées de 0,25, 0,5 et 0,75 s (même règle : au moins 50 % d’échantillons de crise), puis miroir gauche-droite de toutes les fenêtres de crise (Fp1↔Fp2, F7↔F8, F3↔F4, T3↔T4, C3↔C4, T5↔T6, P3↔P4, O1↔O2). Sur les 21 enregistrements : 1,244 fenêtres de crise d’origine + 8,230 ajoutées (3,493 décalées, 1,244 miroirs, 3,493 décalées et miroirs), gardées dans un fichier séparé (`data/processed/windows_features_official_augmented.parquet`, `python scripts/build_augmented.py`). Ces fenêtres se recouvrent fortement et viennent des mêmes crises : elles ajoutent des exemples, pas de nouvelles crises ni de nouveaux patients.
+- **Test** : toujours les proportions réelles et les fenêtres d’origine seulement. `GroupKFold` à 5 plis par enregistrement (mêmes plis partout) : chaque fenêtre est prédite par un modèle qui n’a jamais vu son enregistrement.
 - **Seuil** : pour chaque modèle, le seuil qui maximise le F1 événement sur ses prédictions hors-pli; les résultats à 0,50 sont donnés aussi. Ce seuil est choisi et évalué sur les mêmes prédictions, donc les scores au meilleur seuil sont légèrement optimistes.
 
 Modèle par défaut (meilleur F1 événement) : **SVM, non équilibré**.
@@ -15,34 +16,43 @@ Modèle par défaut (meilleur F1 événement) : **SVM, non équilibré**.
 |---|---:|---:|---:|---:|
 | Non équilibré | 25,135 | 24,140 | 995 | 4.0% |
 | Équilibré | 1,990 | 995 | 995 | 50.0% |
+| Augmenté | 31,719 | 24,140 | 7,579 | 23.9% |
 
-## Les 8 modèles au meilleur seuil de chacun
+## Les 12 modèles au meilleur seuil de chacun
 
 | Algorithme | Mode | Seuil | Fenêtres : precision | recall | F1 | Événements : F1 | recall | precision | Trouvées / manquées | Fausses alarmes | FA / heure | Erreur début (s) | Erreur fin (s) | Temps d’entraînement (s/pli) |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | Decision Tree | non équilibré | 0.05 | 0.429 | 0.590 | 0.497 | 0.290 | 0.978 | 0.170 | 91 / 2 | 561 | 64.2 | +0.43 | -0.09 | 23.49 |
 | Decision Tree | équilibré | 0.05 | 0.191 | 0.825 | 0.311 | 0.148 | 0.989 | 0.080 | 92 / 1 | 1229 | 140.7 | -5.28 | +6.00 | 0.93 |
+| Decision Tree | augmenté | 0.05 | 0.244 | 0.746 | 0.368 | 0.171 | 0.989 | 0.094 | 92 / 1 | 1007 | 115.3 | -1.15 | +1.42 | 31.88 |
 | Random Forest | non équilibré | 0.67 | 0.844 | 0.518 | 0.642 | 0.867 | 0.935 | 0.807 | 87 / 6 | 26 | 3.0 | +0.90 | -1.46 | 5.68 |
 | Random Forest | équilibré | 0.99 | 0.778 | 0.343 | 0.476 | 0.785 | 0.860 | 0.721 | 80 / 13 | 39 | 4.5 | +1.94 | -2.03 | 0.32 |
+| Random Forest | augmenté | 0.93 | 0.869 | 0.377 | 0.526 | 0.854 | 0.903 | 0.810 | 84 / 9 | 26 | 3.0 | +1.35 | -1.92 | 7.84 |
 | KNN | non équilibré | 0.61 | 0.848 | 0.420 | 0.562 | 0.828 | 0.925 | 0.750 | 86 / 7 | 37 | 4.2 | +1.21 | -2.08 | 0.13 |
 | KNN | équilibré | 0.81 | 0.609 | 0.699 | 0.650 | 0.519 | 0.968 | 0.355 | 90 / 3 | 189 | 21.6 | +0.10 | +0.12 | 0.01 |
+| KNN | augmenté | 0.81 | 0.794 | 0.567 | 0.661 | 0.692 | 0.968 | 0.539 | 90 / 3 | 95 | 10.9 | +0.68 | -0.73 | 0.13 |
 | SVM | non équilibré | 0.82 | 0.891 | 0.421 | 0.572 | **0.894** | 0.925 | 0.866 | 86 / 7 | 16 | 1.8 | +1.64 | -1.99 | 49.01 |
 | SVM | équilibré | 0.99 | 0.741 | 0.314 | 0.441 | 0.821 | 0.860 | 0.785 | 80 / 13 | 29 | 3.3 | +1.49 | -1.57 | 0.81 |
+| SVM | augmenté | 0.98 | 0.822 | 0.494 | 0.617 | 0.862 | 0.968 | 0.778 | 90 / 3 | 32 | 3.7 | +1.10 | -1.30 | 191.60 |
 
 Fenêtres : fenêtres de 2 s. Événements : une crise est trouvée si au moins une détection la chevauche; une fausse alarme est une détection hors de toute crise annotée. Erreur de début / de fin : détecté − réel, moyenne sur les crises trouvées (positif = en retard). Temps d’entraînement : ajustement du modèle sur un pli; le mode équilibré est plus rapide car il s’entraîne sur environ 12 fois moins de fenêtres. Pour KNN, l’ajustement est presque instantané : son coût est à la prédiction, non mesurée ici.
 
-## Les 8 modèles au seuil 0,50
+## Les 12 modèles au seuil 0,50
 
 | Algorithme | Mode | Seuil | Fenêtres : precision | recall | F1 | Événements : F1 | recall | precision | Trouvées / manquées | Fausses alarmes | FA / heure | Erreur début (s) | Erreur fin (s) | Temps d’entraînement (s/pli) |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | Decision Tree | non équilibré | 0.50 | 0.429 | 0.590 | 0.497 | 0.290 | 0.978 | 0.170 | 91 / 2 | 561 | 64.2 | +0.43 | -0.09 | 23.49 |
 | Decision Tree | équilibré | 0.50 | 0.191 | 0.825 | 0.311 | 0.148 | 0.989 | 0.080 | 92 / 1 | 1229 | 140.7 | -5.28 | +6.00 | 0.93 |
+| Decision Tree | augmenté | 0.50 | 0.244 | 0.746 | 0.368 | 0.171 | 0.989 | 0.094 | 92 / 1 | 1007 | 115.3 | -1.15 | +1.42 | 31.88 |
 | Random Forest | non équilibré | 0.50 | 0.793 | 0.654 | 0.717 | 0.832 | 0.978 | 0.723 | 91 / 2 | 41 | 4.7 | +0.54 | -0.54 | 5.68 |
 | Random Forest | équilibré | 0.50 | 0.304 | 0.872 | 0.451 | 0.274 | 1.000 | 0.159 | 93 / 0 | 524 | 60.0 | -2.49 | +5.56 | 0.32 |
+| Random Forest | augmenté | 0.50 | 0.557 | 0.795 | 0.655 | 0.511 | 0.989 | 0.345 | 92 / 1 | 194 | 22.2 | -0.40 | +0.52 | 7.84 |
 | KNN | non équilibré | 0.50 | 0.787 | 0.556 | 0.652 | 0.754 | 0.968 | 0.618 | 90 / 3 | 68 | 7.8 | +0.71 | -1.12 | 0.13 |
 | KNN | équilibré | 0.50 | 0.324 | 0.824 | 0.465 | 0.224 | 0.989 | 0.126 | 92 / 1 | 679 | 77.7 | -1.48 | +1.89 | 0.01 |
+| KNN | augmenté | 0.50 | 0.546 | 0.748 | 0.631 | 0.358 | 0.978 | 0.219 | 91 / 2 | 364 | 41.7 | -0.30 | +0.65 | 0.13 |
 | SVM | non équilibré | 0.50 | 0.833 | 0.588 | 0.689 | **0.857** | 0.957 | 0.775 | 89 / 4 | 31 | 3.5 | +0.73 | -0.88 | 49.01 |
 | SVM | équilibré | 0.50 | 0.300 | 0.858 | 0.444 | 0.285 | 0.989 | 0.167 | 92 / 1 | 495 | 56.7 | -2.18 | +3.98 | 0.81 |
+| SVM | augmenté | 0.50 | 0.582 | 0.794 | 0.671 | 0.470 | 0.978 | 0.310 | 91 / 2 | 223 | 25.5 | -0.36 | +0.66 | 191.60 |
 
 L’arbre de décision ne produit que des probabilités 0 ou 1 : son résultat ne dépend pas du seuil.
 
@@ -71,12 +81,16 @@ ECG, EMG et SLI ne sont jamais utilisés comme caractéristiques. Ils servent ic
 |---|---:|---:|---:|---:|---:|---:|---:|
 | Decision Tree, non équilibré | 561 | 175/561 (31%) | 90/561 (16%) | 11/561 (2%) | 47/316 (15%) | 1/195 (1%) | 10/561 (2%) |
 | Decision Tree, équilibré | 1229 | 354/1229 (29%) | 194/1229 (16%) | 21/1229 (2%) | 80/594 (13%) | 1/340 (0%) | 6/1229 (0%) |
+| Decision Tree, augmenté | 1007 | 312/1007 (31%) | 146/1007 (14%) | 12/1007 (1%) | 77/490 (16%) | 2/385 (1%) | 11/1007 (1%) |
 | Random Forest, non équilibré | 26 | 12/26 (46%) | 2/26 (8%) | 1/26 (4%) | 1/16 (6%) | 0/3 (0%) | 5/26 (19%) |
 | Random Forest, équilibré | 39 | 17/39 (44%) | 5/39 (13%) | 1/39 (3%) | 3/31 (10%) | 0/1 (0%) | 5/39 (13%) |
+| Random Forest, augmenté | 26 | 11/26 (42%) | 2/26 (8%) | 1/26 (4%) | 2/16 (12%) | 0/2 (0%) | 4/26 (15%) |
 | KNN, non équilibré | 37 | 10/37 (27%) | 3/37 (8%) | 2/37 (5%) | 1/14 (7%) | 0/4 (0%) | 2/37 (5%) |
 | KNN, équilibré | 189 | 55/189 (29%) | 19/189 (10%) | 5/189 (3%) | 5/94 (5%) | 1/28 (4%) | 3/189 (2%) |
+| KNN, augmenté | 95 | 30/95 (32%) | 11/95 (12%) | 4/95 (4%) | 4/58 (7%) | 0/6 (0%) | 4/95 (4%) |
 | SVM, non équilibré | 16 | 7/16 (44%) | 1/16 (6%) | 1/16 (6%) | 3/9 (33%) | 0/1 (0%) | 2/16 (12%) |
 | SVM, équilibré | 29 | 12/29 (41%) | 5/29 (17%) | 2/29 (7%) | 2/14 (14%) | 0/1 (0%) | 2/29 (7%) |
+| SVM, augmenté | 32 | 17/32 (53%) | 2/32 (6%) | 1/32 (3%) | 4/20 (20%) | 0/2 (0%) | 4/32 (12%) |
 | *Crises réelles (référence)* | 93 | 37/93 (40%) | 10/93 (11%) | 1/93 (1%) | 4/31 (13%) | 0/15 (0%) | 23/93 (25%) |
 
 Lecture pour le modèle par défaut (SVM, non équilibré) : 7/16 (44%) de ses fausses alarmes tombent pendant l’hyperpnée, qui ne représente que 28% du temps; 1/16 (6%) pendant la SLI (15% du temps), dont 1 pendant un palier à 2–4 Hz; bouffée EMG : 0/1 (0%). Les crises réelles suivent la même tendance : 37/93 (40%) surviennent pendant l’hyperpnée, qui sert justement à les provoquer. Une fausse alarme pendant HPN ou SLI peut donc être une décharge réelle non annotée aussi bien qu’une erreur du modèle; ces chiffres ne permettent pas de trancher.
@@ -85,9 +99,11 @@ Lecture pour le modèle par défaut (SVM, non équilibré) : 7/16 (44%) de ses f
 
 - **Meilleur modèle** : SVM non équilibré (F1 événement 0.894, 86 crises trouvées sur 93, 16 fausses alarmes), devant Random Forest non équilibré (0.867). L’écart entre les premiers correspond à quelques événements : il n’est pas assez grand pour les départager avec certitude.
 - **Effet de l’équilibrage au meilleur seuil** (non équilibré → équilibré) : Decision Tree : F1 événement 0.290 → 0.148, fausses alarmes 561 → 1229, seuil 0.05 → 0.05; Random Forest : F1 événement 0.867 → 0.785, fausses alarmes 26 → 39, seuil 0.67 → 0.99; KNN : F1 événement 0.828 → 0.519, fausses alarmes 37 → 189, seuil 0.61 → 0.81; SVM : F1 événement 0.894 → 0.821, fausses alarmes 16 → 29, seuil 0.82 → 0.99.
+- **Effet de l’augmentation au meilleur seuil** (non équilibré → augmenté) : Decision Tree : F1 événement 0.290 → 0.171, crises trouvées 91 → 92, fausses alarmes 561 → 1007, seuil 0.05 → 0.05; Random Forest : F1 événement 0.867 → 0.854, crises trouvées 87 → 84, fausses alarmes 26 → 26, seuil 0.67 → 0.93; KNN : F1 événement 0.828 → 0.692, crises trouvées 86 → 90, fausses alarmes 37 → 95, seuil 0.61 → 0.81; SVM : F1 événement 0.894 → 0.862, crises trouvées 86 → 90, fausses alarmes 16 → 32, seuil 0.82 → 0.98. Le F1 événement ne monte pour aucun des 4 algorithmes; le meilleur modèle des 12 reste en mode non équilibré.
+- **Augmentation au seuil fixe 0,50** : recall fenêtre +0.174 en moyenne sur les 4 algorithmes, precision fenêtre -0.228 (par rapport au non équilibré). Les fenêtres ajoutées viennent des mêmes 93 crises : elles déplacent le compromis recall / precision, elles n’apportent pas de crises nouvelles.
 - **Au seuil fixe 0,50**, l’équilibrage change surtout le compromis : recall fenêtre +0.248 en moyenne, precision fenêtre -0.431, et 12.1 fois plus de fausses alarmes pour Random Forest, KNN et SVM réunis. Un modèle entraîné à 50 % de crises surestime la probabilité de crise quand il est testé sur 4 %.
 - **Le seuil ne compense qu’en partie l’équilibrage** : les modèles équilibrés demandent un seuil bien plus élevé (Random Forest 0.99, KNN 0.81, SVM 0.99) et restent en dessous de leur version non équilibrée. Pour Random Forest et SVM, le meilleur seuil atteint la limite haute explorée (0,99) : presque toutes leurs probabilités utiles sont comprimées près de 1, ce qui rend le réglage fragile. Ici, entraîner sur les proportions réelles et choisir le seuil donne de meilleurs résultats que rééquilibrer.
-- **Arbre de décision** : inutilisable pour la détection temporelle dans les deux modes (561 et 1229 fausses alarmes), car il ne donne que 0 ou 1.
+- **Arbre de décision** : inutilisable pour la détection temporelle dans tous les modes (561, 1229, 1007 fausses alarmes), car il ne donne que 0 ou 1.
 - **Limites** : 21 enregistrements, 93 crises, hyperparamètres par défaut, identité des patients non confirmée. Les différences de 0,01 à 0,02 en F1 événement sont dans la variabilité entre plis et entre graines.
 
-Reproduction : `python scripts/train_registry.py`, `python scripts/prepare_app_data.py`, `python scripts/compare_models.py`. Détails par modèle : `models/registry.json`.
+Reproduction : `python scripts/build_augmented.py`, `python scripts/train_registry.py`, `python scripts/prepare_app_data.py`, `python scripts/compare_models.py`. Détails par modèle : `models/registry.json`.

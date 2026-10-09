@@ -1,4 +1,4 @@
-"""Write docs/MODEL_COMPARISON.md: the 8 registered models side by side.
+"""Write docs/MODEL_COMPARISON.md: the registered models side by side.
 
 Reads models/registry.json, the out-of-fold predictions and the app data (technician notes and
 reference channels). Run after scripts/train_registry.py and scripts/prepare_app_data.py.
@@ -21,7 +21,8 @@ from src.detection import detect_all
 REGISTRY = ROOT / "models/registry.json"
 APP_DATA = ROOT / "data/processed/app"
 ANNOTATIONS = ROOT / "data/interim/official/annotations_clean.csv"
-MODE_NAMES = {"unbalanced": "non équilibré", "balanced": "équilibré"}
+MODE_NAMES = {"unbalanced": "non équilibré", "balanced": "équilibré", "augmented": "augmenté"}
+AUGMENTED_COUNTS = ROOT / "outputs/augmented_window_counts.csv"
 EMG_BURST_RATIO = 3.0
 
 
@@ -99,16 +100,31 @@ def main() -> None:
     seizures = analyse(annotations[["recording", "start_s", "end_s"]])
 
     default = registry["default_model"]
+    modes = [mode for mode in MODE_NAMES if f"rf_{mode}" in models]
+    augmented = "augmented" in modes
+    count = len(models)
     lines = [
-        "# Comparaison des 8 modèles",
+        f"# Comparaison des {count} modèles",
         "",
-        f"8 modèles = 4 algorithmes (Decision Tree, Random Forest, KNN, SVM) × 2 modes d’entraînement, sur le jeu officiel filtré à {len(registry['channels'])} canaux EEG "
+        f"{count} modèles = 4 algorithmes (Decision Tree, Random Forest, KNN, SVM) × {len(modes)} modes d’entraînement, sur le jeu officiel filtré à {len(registry['channels'])} canaux EEG "
         f"({len(registry['features'])} caractéristiques). Hyperparamètres par défaut de scikit-learn; `StandardScaler` pour KNN et SVM.",
         "",
         "- **Non équilibré** : chaque pli d’entraînement est utilisé tel quel.",
         "- **Équilibré** : sous-échantillonnage aléatoire du pli d’entraînement seulement : toutes les fenêtres de classe 1 + autant de fenêtres de classe 0 tirées au hasard (50/50). "
         f"Répété avec {len(registry['balanced_seeds'])} graines ({', '.join(map(str, registry['balanced_seeds']))}); la graine {registry['saved_seed']} sert aux prédictions et aux modèles sauvegardés.",
-        "- **Test** : toujours les proportions réelles. `GroupKFold` à 5 plis par enregistrement (mêmes plis partout) : chaque fenêtre est prédite par un modèle qui n’a jamais vu son enregistrement.",
+    ]
+    if augmented:
+        added = pd.read_csv(AUGMENTED_COUNTS).set_index("recording").loc["OVERALL"]
+        lines.append(
+            "- **Augmenté** : le pli d’entraînement complet + des fenêtres de crise supplémentaires tirées du signal réel des enregistrements d’entraînement seulement : "
+            f"fenêtres décalées de 0,25, 0,5 et 0,75 s (même règle : au moins 50 % d’échantillons de crise), puis miroir gauche-droite de toutes les fenêtres de crise "
+            f"(Fp1↔Fp2, F7↔F8, F3↔F4, T3↔T4, C3↔C4, T5↔T6, P3↔P4, O1↔O2). Sur les 21 enregistrements : {int(added['official_class_1']):,} fenêtres de crise d’origine "
+            f"+ {int(added['augmented_total']):,} ajoutées ({int(added['shift']):,} décalées, {int(added['mirror']):,} miroirs, {int(added['shift+mirror']):,} décalées et miroirs), "
+            "gardées dans un fichier séparé (`data/processed/windows_features_official_augmented.parquet`, `python scripts/build_augmented.py`). "
+            "Ces fenêtres se recouvrent fortement et viennent des mêmes crises : elles ajoutent des exemples, pas de nouvelles crises ni de nouveaux patients."
+        )
+    lines += [
+        "- **Test** : toujours les proportions réelles et les fenêtres d’origine seulement. `GroupKFold` à 5 plis par enregistrement (mêmes plis partout) : chaque fenêtre est prédite par un modèle qui n’a jamais vu son enregistrement.",
         "- **Seuil** : pour chaque modèle, le seuil qui maximise le F1 événement sur ses prédictions hors-pli; les résultats à 0,50 sont donnés aussi. "
         "Ce seuil est choisi et évalué sur les mêmes prédictions, donc les scores au meilleur seuil sont légèrement optimistes.",
         "",
@@ -119,7 +135,7 @@ def main() -> None:
         "| Mode | Fenêtres d’entraînement par pli (moyenne) | Classe 0 | Classe 1 | Part de classe 1 |",
         "|---|---:|---:|---:|---:|",
     ]
-    for mode in ("unbalanced", "balanced"):
+    for mode in modes:
         training = models[f"rf_{mode}"]["training"]
         lines.append(f"| {MODE_NAMES[mode].capitalize()} | {training['windows']:,.0f} | {training['class_0']:,.0f} | {training['class_1']:,.0f} | {training['class_1_share']:.1%} |")
 
@@ -146,14 +162,14 @@ def main() -> None:
                 f"{event['false_alarms_per_hour']:.1f} | {onset} | {offset} | {entry['fit_seconds_per_fold']:.2f} |"
             )
 
-    table("at_best_threshold", "## Les 8 modèles au meilleur seuil de chacun")
+    table("at_best_threshold", f"## Les {count} modèles au meilleur seuil de chacun")
     lines += [
         "",
         "Fenêtres : fenêtres de 2 s. Événements : une crise est trouvée si au moins une détection la chevauche; une fausse alarme est une détection hors de toute crise annotée. "
         "Erreur de début / de fin : détecté − réel, moyenne sur les crises trouvées (positif = en retard). "
         "Temps d’entraînement : ajustement du modèle sur un pli; le mode équilibré est plus rapide car il s’entraîne sur environ 12 fois moins de fenêtres. Pour KNN, l’ajustement est presque instantané : son coût est à la prédiction, non mesurée ici.",
     ]
-    table("at_0.50", "## Les 8 modèles au seuil 0,50")
+    table("at_0.50", f"## Les {count} modèles au seuil 0,50")
     lines += [
         "",
         "L’arbre de décision ne produit que des probabilités 0 ou 1 : son résultat ne dépend pas du seuil.",
@@ -230,6 +246,30 @@ def main() -> None:
         )
     lines.append("- **Effet de l’équilibrage au meilleur seuil** (non équilibré → équilibré) : " + "; ".join(effects) + ".")
     half = lambda key: models[key]["at_0.50"]
+    if augmented:
+        effects, better, worse = [], [], []
+        for algorithm in ("dt", "rf", "knn", "svm"):
+            a, b = best(f"{algorithm}_unbalanced"), best(f"{algorithm}_augmented")
+            name = models[f"{algorithm}_unbalanced"]["algorithm_name"]
+            effects.append(
+                f"{name} : F1 événement {a['event']['f1']:.3f} → {b['event']['f1']:.3f}, crises trouvées {a['event']['tp']} → {b['event']['tp']}, "
+                f"fausses alarmes {a['event']['fp']} → {b['event']['fp']}, seuil {a['threshold']:.2f} → {b['threshold']:.2f}"
+            )
+            (better if b["event"]["f1"] > a["event"]["f1"] else worse).append(name)
+        top_mode = MODE_NAMES[models[top]["mode"]]
+        verdict = (
+            (f"Le F1 événement monte pour {', '.join(better)} et ne monte pas pour {', '.join(worse)}; " if better else "Le F1 événement ne monte pour aucun des 4 algorithmes; ")
+            + 
+            f"le meilleur modèle des {count} reste en mode {top_mode}." if models[top]["mode"] != "augmented"
+            else f"Le F1 événement monte pour {', '.join(better)}" + (f" et ne monte pas pour {', '.join(worse)}" if worse else "") + f"; le meilleur modèle des {count} est en mode augmenté."
+        )
+        recall_aug = np.mean([half(f"{a}_augmented")["window"]["recall"] - half(f"{a}_unbalanced")["window"]["recall"] for a in ("dt", "rf", "knn", "svm")])
+        precision_aug = np.mean([half(f"{a}_augmented")["window"]["precision"] - half(f"{a}_unbalanced")["window"]["precision"] for a in ("dt", "rf", "knn", "svm")])
+        lines += [
+            "- **Effet de l’augmentation au meilleur seuil** (non équilibré → augmenté) : " + "; ".join(effects) + ". " + verdict,
+            f"- **Augmentation au seuil fixe 0,50** : recall fenêtre {recall_aug:+.3f} en moyenne sur les 4 algorithmes, precision fenêtre {precision_aug:+.3f} "
+            "(par rapport au non équilibré). Les fenêtres ajoutées viennent des mêmes 93 crises : elles déplacent le compromis recall / precision, elles n’apportent pas de crises nouvelles.",
+        ]
     balanced_thresholds = [f"{models[key]['algorithm_name']} {best(key)['threshold']:.2f}" for key in ("rf_balanced", "knn_balanced", "svm_balanced")]
     recall_gain = np.mean([half(f"{a}_balanced")["window"]["recall"] - half(f"{a}_unbalanced")["window"]["recall"] for a in ("dt", "rf", "knn", "svm")])
     precision_loss = np.mean([half(f"{a}_balanced")["window"]["precision"] - half(f"{a}_unbalanced")["window"]["precision"] for a in ("dt", "rf", "knn", "svm")])
@@ -241,10 +281,10 @@ def main() -> None:
         f"({', '.join(balanced_thresholds)}) "
         "et restent en dessous de leur version non équilibrée. Pour Random Forest et SVM, le meilleur seuil atteint la limite haute explorée (0,99) : "
         "presque toutes leurs probabilités utiles sont comprimées près de 1, ce qui rend le réglage fragile. Ici, entraîner sur les proportions réelles et choisir le seuil donne de meilleurs résultats que rééquilibrer.",
-        f"- **Arbre de décision** : inutilisable pour la détection temporelle dans les deux modes ({best('dt_unbalanced')['event']['fp']} et {best('dt_balanced')['event']['fp']} fausses alarmes), car il ne donne que 0 ou 1.",
+        f"- **Arbre de décision** : inutilisable pour la détection temporelle dans tous les modes ({', '.join(str(best(f'dt_{mode}')['event']['fp']) for mode in modes)} fausses alarmes), car il ne donne que 0 ou 1.",
         "- **Limites** : 21 enregistrements, 93 crises, hyperparamètres par défaut, identité des patients non confirmée. Les différences de 0,01 à 0,02 en F1 événement sont dans la variabilité entre plis et entre graines.",
         "",
-        "Reproduction : `python scripts/train_registry.py`, `python scripts/prepare_app_data.py`, `python scripts/compare_models.py`. Détails par modèle : `models/registry.json`.",
+        "Reproduction : `python scripts/build_augmented.py`, `python scripts/train_registry.py`, `python scripts/prepare_app_data.py`, `python scripts/compare_models.py`. Détails par modèle : `models/registry.json`.",
         "",
     ]
     (ROOT / "docs/MODEL_COMPARISON.md").write_text("\n".join(lines))
