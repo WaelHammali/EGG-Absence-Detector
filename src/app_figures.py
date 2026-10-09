@@ -11,27 +11,27 @@ from src.app_data import BANDS
 from src.io import CHANNELS
 
 
-# Semantic colors, identical in plots, tables, badges and legends.
-REAL = "#34D399"
-DETECTED = "#F87171"
-EVENT = "#FBBF24"
-THRESHOLD = "#A78BFA"
 UI_FONT = "Inter, system-ui, -apple-system, Segoe UI, sans-serif"
 MONO_FONT = "JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, monospace"
 
+# Design tokens shared with assets/app.css. Light is the default "calm clinical" theme.
+# real / detected / note / threshold keep the same meaning everywhere (plots, badges, legends);
+# only their shade changes with the theme so that they stay readable on each background.
 THEMES = {
-    "dark": {
-        "background": "#0B1220", "panel": "#111A2E", "text": "#E5E9F0", "muted": "#94A3B8",
-        "grid": "rgba(148,163,184,0.13)", "axis": "rgba(148,163,184,0.35)", "track": "rgba(148,163,184,0.10)",
-        "probability": "#CBD5E1",
-        # Region hues (frontal, central, temporal, posterior); channels of a region share a hue.
-        "regions": {"frontal": "#4FD1C5", "central": "#3B82F6", "temporal": "#E05599", "posterior": "#4698CF"},
-    },
     "light": {
-        "background": "#F6F8FB", "panel": "#FFFFFF", "text": "#0F172A", "muted": "#64748B",
-        "grid": "rgba(15,23,42,0.08)", "axis": "rgba(15,23,42,0.30)", "track": "rgba(15,23,42,0.05)",
+        "background": "#F5F7FA", "panel": "#FFFFFF", "text": "#0F172A", "muted": "#64748B", "accent": "#0B7285",
+        "grid": "rgba(15,23,42,0.06)", "axis": "rgba(15,23,42,0.18)", "track": "#EEF1F5",
         "probability": "#475569",
+        "real": "#12A36F", "detected": "#E5484D", "note": "#D97706", "threshold": "#7C5CFC",
+        # Region hues (frontal, central, temporal, posterior); channels of a region share a hue.
         "regions": {"frontal": "#0D9488", "central": "#2563EB", "temporal": "#DB2777", "posterior": "#0284C7"},
+    },
+    "dark": {
+        "background": "#0A0F1C", "panel": "#101827", "text": "#E6EAF2", "muted": "#94A3B8", "accent": "#4FD1C5",
+        "grid": "rgba(148,163,184,0.10)", "axis": "rgba(148,163,184,0.28)", "track": "rgba(148,163,184,0.10)",
+        "probability": "#CBD5E1",
+        "real": "#34D399", "detected": "#F87171", "note": "#FBBF24", "threshold": "#A78BFA",
+        "regions": {"frontal": "#4FD1C5", "central": "#60A5FA", "temporal": "#F472B6", "posterior": "#38BDF8"},
     },
 }
 
@@ -76,7 +76,7 @@ def axis_style(theme: str, **overrides) -> dict:
     return style
 
 
-def message_figure(text: str, theme: str, height: int = 320) -> go.Figure:
+def message_figure(text: str, theme: str, height: int | None = 320) -> go.Figure:
     """Friendly empty or error state."""
     figure = go.Figure()
     figure.update_layout(
@@ -109,7 +109,7 @@ def event_shapes(
     for number, row in enumerate(real.itertuples(index=False), 1):
         shape = {
             "type": "rect", "xref": "x", "yref": "paper", "x0": row.start_s, "x1": row.end_s, "y0": 0, "y1": 1,
-            "fillcolor": rgba(REAL, 0.20), "line": {"width": 0}, "layer": "below",
+            "fillcolor": rgba(tokens["real"], 0.14), "line": {"width": 0}, "layer": "below",
         }
         if labels:
             shape["label"] = {"text": f"Seizure {number}", "textposition": "top left", "font": {"size": 10, "color": tokens["text"]}, "padding": 3}
@@ -117,7 +117,7 @@ def event_shapes(
     for number, row in enumerate(detected.itertuples(index=False), 1):
         shape = {
             "type": "rect", "xref": "x", "yref": "paper", "x0": row.start_s, "x1": row.end_s, "y0": 0, "y1": 1,
-            "fillcolor": rgba(DETECTED, 0.16), "line": {"width": 1, "color": rgba(DETECTED, 0.9), "dash": "dot"}, "layer": "below",
+            "fillcolor": rgba(tokens["detected"], 0.11), "line": {"width": 1, "color": rgba(tokens["detected"], 0.9), "dash": "dot"}, "layer": "below",
         }
         if labels:
             shape["label"] = {"text": f"Detected {number}", "textposition": "bottom left", "font": {"size": 10, "color": tokens["text"]}, "padding": 3}
@@ -126,7 +126,7 @@ def event_shapes(
         shapes.append(
             {
                 "type": "line", "xref": "x2 domain", "yref": probability_axis, "x0": 0, "x1": 1, "y0": threshold, "y1": threshold,
-                "line": {"color": THRESHOLD, "width": 1.6, "dash": "dash"},
+                "line": {"color": tokens["threshold"], "width": 1.6, "dash": "dash"},
                 "label": {"text": f"Threshold {threshold:.2f}", "textposition": "end", "yanchor": "bottom", "font": {"size": 10, "color": tokens["text"]}},
             }
         )
@@ -175,19 +175,17 @@ def recording_figure(
     has_events = events is not None and len(events) > 0
     has_strip = has_events or len(real) > 0
     duration = float(time[-1])
-    probability_height, event_height = 140, 34
-    # Rows get shorter as channels are added, so the full montage still fits on a screen.
-    row_pixels = 78 if len(rows) <= 8 else 60 if len(rows) <= 12 else 46
-    eeg_height = (row_pixels * len(rows) if stacked else 360)
-    eeg_height = max(eeg_height, 200)
-    gap = 26
+    # Nominal sizes used only as proportions: the figure fills the height the page gives it,
+    # so that every channel, the bottom row and the navigator stay on screen together.
+    probability_height, event_height = 104, 24
+    eeg_height = max(30 * len(rows), 420) if stacked else 520
+    gap = 18
     references = references or {}
-    reference_pixels, reference_gap = 46, 14
+    reference_pixels, reference_gap = 34, 12
     reference_height = reference_pixels * len(references) + (reference_gap if references else 0)
     plot_height = eeg_height + reference_height + probability_height + gap + (event_height + 6 if has_strip else 0)
-    # The top margin holds the toolbar and, below it, up to two legend rows.
-    margin = {"l": 64, "r": 24, "t": 76, "b": 36}
-    height = plot_height + margin["t"] + margin["b"]
+    # Stacked rows are named on the axis, so the plot legend is only needed in overlay mode.
+    margin = {"l": 52, "r": 16, "t": 10 if stacked else 34, "b": 30}
 
     def fraction(pixels: float) -> float:
         return pixels / plot_height
@@ -250,15 +248,14 @@ def recording_figure(
     )
     layout["xaxis2"] = axis_style(
         theme, range=list(view), anchor=probability_ref, ticksuffix=" s", showgrid=True, **spikes,
-        title={"text": "Time since recording start", "font": {"size": 12, "color": tokens["muted"]}},
-        rangeslider={"visible": True, "thickness": 0.07, "range": [0.0, duration], "autorange": False, "bgcolor": tokens["track"], "bordercolor": tokens["axis"], "borderwidth": 1},
+        rangeslider={"visible": True, "thickness": 0.05, "range": [0.0, duration], "autorange": False, "bgcolor": tokens["track"], "bordercolor": tokens["axis"], "borderwidth": 1},
     )
 
     if has_events:
         figure.add_trace(
             go.Scatter(
                 x=events["time_s"], y=np.zeros(len(events)), mode="markers", name="Technician note", xaxis="x", yaxis="y",
-                marker={"color": EVENT, "symbol": "triangle-down", "size": 10, "line": {"color": tokens["panel"], "width": 1}},
+                marker={"color": tokens["note"], "symbol": "triangle-down", "size": 10, "line": {"color": tokens["panel"], "width": 1}},
                 customdata=np.stack([events["label"], events["category"]], axis=1),
                 hovertemplate="<b>%{customdata[1]}</b><br>%{customdata[0]}<br>%{x:.0f} s<extra></extra>",
             )
@@ -268,7 +265,7 @@ def recording_figure(
         figure.add_trace(
             go.Scatter(
                 x=real["start_s"], y=np.zeros(len(real)), mode="markers", name="Seizure start", xaxis="x", yaxis="y",
-                marker={"color": REAL, "symbol": "diamond", "size": 11, "line": {"color": tokens["panel"], "width": 1}},
+                marker={"color": tokens["real"], "symbol": "diamond", "size": 11, "line": {"color": tokens["panel"], "width": 1}},
                 customdata=np.stack([np.arange(1, len(real) + 1), real["start_s"], real["end_s"]], axis=1),
                 hovertemplate="<b>Seizure %{customdata[0]}</b><br>%{customdata[1]:.1f} s → %{customdata[2]:.1f} s<extra></extra>",
             )
@@ -294,7 +291,7 @@ def recording_figure(
             figure.add_trace(
                 go.Scatter(
                     name="Seizure on the curve", mode="lines", xaxis="x", yaxis=axis, legendgroup="seizure-curve",
-                    showlegend=index == 0, line={"color": REAL, "width": 1.6}, hoverinfo="skip",
+                    showlegend=False, line={"color": tokens["real"], "width": 1.6}, hoverinfo="skip",
                 ),
                 hf_x=time[inside], hf_y=signals[channel][inside],
             )
@@ -302,7 +299,7 @@ def recording_figure(
         figure.add_trace(
             go.Scatter(
                 name="Reference channel (not used by the model)", mode="lines", xaxis="x", yaxis=reference_axes[name],
-                legendgroup="reference", showlegend=index == 0, line={"color": tokens["muted"], "width": 1},
+                legendgroup="reference", showlegend=False, line={"color": tokens["muted"], "width": 1},
                 hovertemplate=f"<b>{name}</b> (reference)<br>%{{x:.3f}} s<br>%{{y:.1f}}<extra></extra>",
             ),
             hf_x=time, hf_y=values,
@@ -311,7 +308,7 @@ def recording_figure(
     figure.add_trace(
         go.Scatter(
             x=label_x, y=label_y, mode="lines", name="Real seizure", xaxis="x2", yaxis=probability_ref,
-            line={"color": REAL, "width": 1.6 if prediction else 2}, fill="tozeroy", fillcolor=rgba(REAL, 0.10 if prediction else 0.25),
+            line={"color": tokens["real"], "width": 1.6 if prediction else 2}, fill="tozeroy", fillcolor=rgba(tokens["real"], 0.10 if prediction else 0.22),
             hovertemplate="%{x:.1f} s<br>real seizure: %{y:.0f}<extra></extra>",
         )
     )
@@ -325,10 +322,14 @@ def recording_figure(
             )
         )
         keys = {"xaxis": "x2", "yaxis": probability_ref}
-        figure.add_trace(legend_key("Detection", DETECTED, **keys))
-        figure.add_trace(legend_key("Threshold", THRESHOLD, dash="dash", **keys))
+        figure.add_trace(legend_key("Detection", tokens["detected"], **keys))
+        figure.add_trace(legend_key("Threshold", tokens["threshold"], dash="dash", **keys))
+    # The page shows one legend under the plot; the plot's own legend only lists channels in overlay mode.
+    for trace in figure.data:
+        if trace.name not in channels:
+            trace.showlegend = False
     figure.update_layout(
-        **base_layout(theme), **layout, height=height, margin=margin, hovermode="closest", dragmode="zoom",
+        **base_layout(theme), **layout, autosize=True, margin=margin, hovermode="closest", dragmode="zoom",
         shapes=event_shapes(real, detected, threshold, probability_ref, theme), uirevision="eeg",
     )
     if references:
@@ -337,7 +338,7 @@ def recording_figure(
             text="reference — not used by the model", font={"size": 10, "color": tokens["muted"]},
         )
     description = {
-        "probability_ref": probability_ref, "curve_channels": curve_channels, "height": height,
+        "probability_ref": probability_ref, "curve_channels": curve_channels,
         "eeg_axes": eeg_axes, "full_scale": full_scale, "prediction": prediction,
     }
     return figure, description
@@ -380,7 +381,7 @@ def training_distribution_figure(rows: list[tuple[str, dict]], theme: str) -> go
     tokens = THEMES[theme]
     names = [name for name, _ in rows]
     figure = go.Figure()
-    for column, label, color in [("class_0", "Class 0 — no seizure", rgba("#94A3B8", 0.55)), ("class_1", "Class 1 — seizure", REAL)]:
+    for column, label, color in [("class_0", "Class 0 — no seizure", rgba("#94A3B8", 0.55)), ("class_1", "Class 1 — seizure", tokens["real"])]:
         shares = [training[column] / training["windows"] for _, training in rows]
         counts = [training[column] for _, training in rows]
         figure.add_trace(
@@ -465,7 +466,7 @@ def curves_figure(curves: dict[str, tuple[str, pd.DataFrame, tuple[float, float]
     layout = base_layout(theme)
     layout["legend"] = {**layout["legend"], "orientation": "h", "y": -0.22, "yanchor": "top", "font": {"size": 11, "color": tokens["text"]}}
     figure.update_layout(
-        **layout, height=380, margin={"l": 56, "r": 16, "t": 16, "b": 40}, hovermode="closest",
+        **layout, height=340, margin={"l": 56, "r": 16, "t": 12, "b": 40}, hovermode="closest",
         xaxis=axis_style(theme, title={"text": x_title, "font": {"size": 12, "color": tokens["muted"]}}, range=[0, 1.02]),
         yaxis=axis_style(theme, title={"text": y_title, "font": {"size": 12, "color": tokens["muted"]}}, range=[0, 1.05]),
     )
@@ -511,7 +512,7 @@ def patient_comparison_figure(recording: str, duration: float, real: pd.DataFram
             )
         )
 
-    lane(real, "Real seizures", "Real seizure (annotation)", REAL)
+    lane(real, "Real seizures", "Real seizure (annotation)", tokens["real"])
     notes = [("Real seizures", f"{len(real)} annotated")]
     for key, (label, detected, matches, metrics) in results.items():
         style = model_style(key, theme)

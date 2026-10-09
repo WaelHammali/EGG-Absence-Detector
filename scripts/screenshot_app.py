@@ -1,132 +1,82 @@
-"""Take screenshots of the three app parts in dark and light mode (outputs/figures/app/).
+"""Take screenshots of the app as it appears on screen (outputs/figures/app/).
 
+Three window sizes (1920x1080, 1440x900, 1280x800), both themes, the three parts, plus the
+side panels, overlay mode, reference channels, the empty state and the 8-model comparison.
 Starts app.py on a free port, drives it with headless Chromium, then stops it.
 Requires `pip install selenium` and a system chromium + chromedriver.
 """
-
-from argparse import ArgumentParser
-from pathlib import Path
 import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import time
-
+from pathlib import Path
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.common.action_chains import ActionChains
 
 ROOT = Path(__file__).resolve().parents[1]
-OUTPUT = ROOT / "outputs/figures/app"
-
-
-def free_port() -> int:
-    with socket.socket() as handle:
-        handle.bind(("127.0.0.1", 0))
-        return handle.getsockname()[1]
-
-
-def wait_for_plots(driver, container: str, timeout: float = 40) -> None:
-    WebDriverWait(driver, timeout).until(
-        lambda d: d.execute_script(
-            "const p = document.querySelector(arguments[0] + ' .js-plotly-plot'); return !!(p && p.data && p.data.length);", container
-        )
-    )
-    time.sleep(1.5)
-
-
-def capture(driver, path: Path, width: int) -> None:
-    # Measure after each resize: the layout reflows when the viewport grows.
-    for _ in range(3):
-        height = driver.execute_script(
-            "const main = document.querySelector('main');"
-            "return Math.ceil(Math.max(document.documentElement.scrollHeight, document.body.scrollHeight, main ? main.scrollHeight : 0));"
-        )
-        # The window is taller than the viewport by the browser chrome.
-        chrome = driver.execute_script("return window.outerHeight - window.innerHeight;")
-        driver.set_window_size(width, max(height, 660) + chrome)
-        time.sleep(1.0)
-    driver.save_screenshot(str(path))
-    print(path.relative_to(ROOT), f"{width}x{height}")
-
-
-def main() -> None:
-    parser = ArgumentParser()
-    parser.add_argument("--recording", default="211104B_D")
-    parser.add_argument("--width", type=int, default=1440)
-    parser.add_argument("--suffix", default="")
-    args = parser.parse_args()
-    OUTPUT.mkdir(parents=True, exist_ok=True)
-    port = free_port()
-    server = subprocess.Popen(
-        [sys.executable, "-c", f"import app; app.app.run(debug=False, host='127.0.0.1', port={port})"],
-        cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-    )
-    options = Options()
-    options.binary_location = shutil.which("chromium") or shutil.which("chromium-browser") or shutil.which("google-chrome")
-    for flag in ("--headless=new", "--no-sandbox", "--hide-scrollbars", "--force-device-scale-factor=1", f"--window-size={args.width},900"):
-        options.add_argument(flag)
-    options.set_capability("goog:loggingPrefs", {"browser": "ALL"})
-    driver = webdriver.Chrome(options=options, service=Service(shutil.which("chromedriver")))
-    base = f"http://127.0.0.1:{port}"
-    problems = []
-    try:
-        for _ in range(60):
-            try:
-                socket.create_connection(("127.0.0.1", port), timeout=0.5).close()
-                break
-            except OSError:
-                time.sleep(0.5)
-        for theme in ("dark", "light"):
-            driver.set_window_size(args.width, 900)
-            driver.get(f"{base}/?theme={theme}&page=comparison&recording={args.recording}")
-            wait_for_plots(driver, "#cmp-f1")
-            time.sleep(2.0)
-            capture(driver, OUTPUT / f"comparison_same_mode_{theme}{args.suffix}.png", args.width)
-            for label, name in (("Same algorithm, both modes", "same_algorithm"), ("All models", "all_models")):
-                driver.set_window_size(args.width, 900)
-                driver.execute_script("window.scrollTo(0, 0);")
-                driver.find_element(By.XPATH, f"//label[normalize-space()='{label}']").click()
-                time.sleep(4.0)
-                capture(driver, OUTPUT / f"comparison_{name}_{theme}{args.suffix}.png", args.width)
-
+OUT = ROOT / "outputs/figures/app"
+OUT.mkdir(parents=True, exist_ok=True)
+with socket.socket() as handle:
+    handle.bind(("127.0.0.1", 0))
+    PORT = handle.getsockname()[1]
+LOG = Path(tempfile.gettempdir()) / "eeg_app_screenshots.log"
+# The server log goes to a file: an unread pipe would fill up and block the server.
+server = subprocess.Popen([sys.executable, "-c", f"import app; app.app.run(debug=False, port={PORT})"], cwd=ROOT, stdout=open(LOG, "w"), stderr=subprocess.STDOUT)
+o = Options(); o.binary_location = shutil.which("chromium")
+for f in ("--headless=new", "--no-sandbox", "--hide-scrollbars", "--window-size=1920,1080"): o.add_argument(f)
+o.set_capability("goog:loggingPrefs", {"browser": "ALL"})
+d = webdriver.Chrome(options=o, service=Service(shutil.which("chromedriver")))
+click = lambda xpath: d.execute_script("arguments[0].click();", d.find_element(By.XPATH, xpath))
+label = lambda text: click(f"//label[normalize-space()='{text}']")
+def size(w, h):
+    chrome = d.execute_script("return window.outerHeight - window.innerHeight;")
+    d.set_window_size(w, h + chrome); time.sleep(1.5)
+def rest():
+    # Park the pointer on the brand so that no tooltip or hover label is captured.
+    ActionChains(d).move_to_element(d.find_element(By.CSS_SELECTOR, ".brand")).perform(); time.sleep(0.9)
+def shot(name, full=False):
+    rest()
+    if full:
+        w = d.execute_script("return window.innerWidth"); h0 = d.execute_script("return window.innerHeight")
+        h = d.execute_script("return Math.ceil(Math.max(document.documentElement.scrollHeight, document.querySelector('main').scrollHeight))")
+        size(w, h); rest(); d.save_screenshot(str(OUT / name)); size(w, h0)
+    else:
+        d.save_screenshot(str(OUT / name))
+    print(name, d.execute_script("const p=document.querySelector('#eeg .js-plotly-plot'); const r=p?p.getBoundingClientRect():null; return [window.innerWidth, window.innerHeight, r&&Math.round(r.top), r&&Math.round(r.bottom), document.documentElement.scrollHeight > window.innerHeight + 2]"))
+try:
+    time.sleep(8); d.get(f"http://127.0.0.1:{PORT}/"); time.sleep(8)
+    for w, h in ((1920, 1080), (1440, 900), (1280, 800)):
+        size(w, h)
+        for theme in ("light", "dark"):
             for page in ("visualisation", "prediction"):
-                driver.set_window_size(args.width, 900)
-                driver.get(f"{base}/?theme={theme}&page={page}&recording={args.recording}")
-                wait_for_plots(driver, "#eeg")
-                driver.find_element(By.ID, "next-seizure").click()
-                time.sleep(2.0)
-                # Click a trace inside the seizure to fill the spectrum card.
-                plot = driver.find_element(By.CSS_SELECTOR, "#eeg .js-plotly-plot")
-                driver.execute_script("arguments[0].scrollIntoView({block: 'start'});", plot)
-                size = plot.size
-                ActionChains(driver).move_to_element_with_offset(plot, 0, int(-size["height"] * 0.18)).pause(0.4).click().perform()
-                time.sleep(2.0)
-                driver.execute_script("window.scrollTo(0, 0);")
-                capture(driver, OUTPUT / f"{page}_{theme}{args.suffix}.png", args.width)
-            # Prediction with the gray reference channels (ECG, EMG, SLI) switched on.
-            driver.set_window_size(args.width, 900)
-            # The switch can sit below the visible part of the sidebar, so click it from the page.
-            switch = driver.find_element(By.XPATH, "//label[normalize-space()='Reference channels (ECG, EMG, SLI)']")
-            driver.execute_script("arguments[0].click();", switch)
-            time.sleep(4.0)
-            capture(driver, OUTPUT / f"prediction_reference_{theme}{args.suffix}.png", args.width)
-        for entry in driver.get_log("browser"):
-            if entry["level"] == "SEVERE":
-                problems.append(entry["message"])
-    finally:
-        driver.quit()
-        server.terminate()
-        output = server.communicate(timeout=10)[0]
-    errors = [line for line in output.splitlines() if "Traceback" in line or "Error" in line]
-    print("Browser console errors:", problems or "none")
-    print("Server errors:", errors or "none")
-    if errors:
-        print(output[-3000:])
-
-
-if __name__ == "__main__":
-    main()
+                d.get(f"http://127.0.0.1:{PORT}/?theme={theme}&page={page}&recording=211104B_D"); time.sleep(8)
+                d.find_element(By.ID, "next-seizure").click(); time.sleep(3)
+                shot(f"{page}_{theme}_{w}.png")
+            d.get(f"http://127.0.0.1:{PORT}/?theme={theme}&page=comparison&recording=211104B_D"); time.sleep(8)
+            shot(f"comparison_{theme}_{w}.png", full=(w == 1920))
+    # states, at 1440x900 light
+    size(1440, 900)
+    d.get(f"http://127.0.0.1:{PORT}/?theme=light&page=prediction&recording=190304A_E"); time.sleep(8)
+    d.find_element(By.ID, "next-seizure").click(); time.sleep(3)
+    label("Reference channels (ECG, EMG, SLI)"); time.sleep(4); shot("state_reference_1440.png")
+    label("Overlay"); time.sleep(4); shot("state_overlay_1440.png")
+    label("All stacked"); label("Reference channels (ECG, EMG, SLI)"); time.sleep(4)
+    plot = d.find_element(By.CSS_SELECTOR, "#eeg .js-plotly-plot")
+    ActionChains(d).move_to_element_with_offset(plot, 40, int(-plot.size["height"] * 0.2)).pause(0.4).click().perform(); time.sleep(3)
+    shot("state_spectrum_drawer_1440.png")
+    for close in d.find_elements(By.CSS_SELECTOR, ".mantine-Drawer-close"): d.execute_script("arguments[0].click();", close)
+    time.sleep(1); click("//button[@id='open-intervals']"); time.sleep(2); shot("state_intervals_drawer_1440.png")
+    for close in d.find_elements(By.CSS_SELECTOR, ".mantine-Drawer-close"): d.execute_script("arguments[0].click();", close)
+    for name in ["Fp1","Fp2","F7","F3","Fz","F4","F8","T3","C3","Cz","C4","T4","T5","P3","Pz","P4","T6","O1","O2"]:
+        click(f"//div[contains(@class,'channel-chip')]//label[normalize-space()='{name}']")
+    time.sleep(12); shot("state_no_channel_1440.png")
+    label("Comparison"); time.sleep(4); label("All models"); time.sleep(6); d.execute_script("window.scrollTo(0,0)"); shot("state_all_models_1440.png", full=True)
+    print("console:", [e["message"][:200] for e in d.get_log("browser") if e["level"] == "SEVERE"] or "none")
+finally:
+    d.quit(); server.terminate(); server.wait(timeout=10)
+    print("server tracebacks:", LOG.read_text().count("Traceback"))

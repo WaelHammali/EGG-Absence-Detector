@@ -1,6 +1,6 @@
 # Frontend redesign — critique and proposal
 
-Status: proposal, waiting for approval. Nothing in the app has been changed yet.
+Status: approved (Style A, calm clinical) and implemented. The critique below describes the previous design; `outputs/figures/app/before/` keeps screenshots of it.
 
 Mock-ups (static, synthetic signals, illustrative numbers): open `mockup.html` in a browser with
 `?style=a|b&page=prediction|comparison`, or look at the four PNG files next to it.

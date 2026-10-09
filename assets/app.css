@@ -1,89 +1,559 @@
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
 
-:root {
-  --app-panel: #ffffff;
-  --app-border: rgba(15, 23, 42, 0.08);
-  --app-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 8px 24px rgba(15, 23, 42, 0.06);
-}
-
+/* Design tokens. Light is the default "calm clinical" theme; the same names exist in
+   src/app_figures.py so that plots and page always match. Spacing follows a 4 / 8 px grid. */
+:root,
 [data-mantine-color-scheme="light"] {
-  --mantine-color-body: #f6f8fb;
+  --app-bg: #f5f7fa;
+  --app-surface: #ffffff;
+  --app-surface-2: #f9fafb;
+  --app-border: #e4e8ee;
+  --app-border-strong: #cfd6df;
+  --app-text: #0f172a;
+  --app-text-2: #475569;
+  --app-text-3: #8492a6;
+  --app-accent: #0b7285;
+  --app-accent-soft: #e6f4f6;
+  --app-accent-text: #0b5f6e;
+  --app-track: #eef1f5;
+  --app-real: #12a36f;
+  --app-detected: #e5484d;
+  --app-note: #d97706;
+  --app-threshold: #7c5cfc;
+  --app-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 1px rgba(15, 23, 42, 0.03);
+  --app-radius: 10px;
+  --mantine-color-body: var(--app-bg);
 }
 
 [data-mantine-color-scheme="dark"] {
-  --mantine-color-body: #0b1220;
-  --app-panel: #111a2e;
+  --app-bg: #0a0f1c;
+  --app-surface: #101827;
+  --app-surface-2: #0d1422;
   --app-border: rgba(148, 163, 184, 0.14);
-  --app-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 10px 28px rgba(0, 0, 0, 0.28);
+  --app-border-strong: rgba(148, 163, 184, 0.26);
+  --app-text: #e6eaf2;
+  --app-text-2: #a3aec2;
+  --app-text-3: #6b7890;
+  --app-accent: #4fd1c5;
+  --app-accent-soft: rgba(79, 209, 197, 0.12);
+  --app-accent-text: #7fe3da;
+  --app-track: rgba(148, 163, 184, 0.1);
+  --app-real: #34d399;
+  --app-detected: #f87171;
+  --app-note: #fbbf24;
+  --app-threshold: #a78bfa;
+  --app-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --mantine-color-body: var(--app-bg);
 }
 
 body {
   font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
-  font-feature-settings: "cv11", "ss01";
+  font-size: 14px;
+  color: var(--app-text);
+  -webkit-font-smoothing: antialiased;
 }
 
-.panel {
-  background: var(--app-panel);
-  border: 1px solid var(--app-border);
-  border-radius: 12px;
-  box-shadow: var(--app-shadow);
-}
-
-.shell-surface {
-  background: var(--app-panel);
-  border-color: var(--app-border);
-}
-
+/* ---------- type scale: section label, card title, body, value */
 .mono {
   font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   font-variant-numeric: tabular-nums;
 }
 
-.kpi-value {
-  font-size: 1.75rem;
-  font-weight: 600;
-  line-height: 1.1;
-}
-
 .section-label {
-  font-size: 0.7rem;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
+  color: var(--app-text-3);
 }
 
-.swatch {
+.card-title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--app-text);
+}
+
+.caption {
+  font-size: 13px;
+  color: var(--app-text-2);
+}
+
+.hint {
+  font-size: 12px;
+  color: var(--app-text-3);
+}
+
+.value {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.hero-value {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 44px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.big-value {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+/* ---------- surfaces */
+.panel {
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius);
+  box-shadow: var(--app-shadow);
+}
+
+.shell-surface {
+  background: var(--app-surface);
+  border-color: var(--app-border);
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  height: 100%;
+  padding: 0 20px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: var(--app-accent);
+  color: var(--app-surface);
+}
+
+/* The three parts read as tabs: text with an underline on the active one. */
+.page-tabs.mantine-SegmentedControl-root {
+  background: transparent;
+  padding: 0;
+  height: 52px;
+  border-radius: 0;
+}
+
+.page-tabs .mantine-SegmentedControl-indicator {
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+  border-bottom: 2px solid var(--app-accent);
+}
+
+.page-tabs .mantine-SegmentedControl-control::before {
+  display: none;
+}
+
+.page-tabs .mantine-SegmentedControl-label {
+  height: 52px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--app-text-2);
+}
+
+.page-tabs .mantine-SegmentedControl-label[data-active] {
+  color: var(--app-text);
+}
+
+.mantine-SegmentedControl-root {
+  background: var(--app-track);
+}
+
+/* ---------- sidebar */
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 16px;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 12px;
+  padding: 10px 12px;
+  background: var(--app-surface-2);
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+}
+
+.facts span {
+  display: block;
+  font-size: 11px;
+  color: var(--app-text-3);
+}
+
+.facts b {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.region-row {
+  display: grid;
+  grid-template-columns: 62px 1fr;
+  align-items: start;
+  gap: 6px;
+}
+
+.region-row > span {
+  font-size: 12px;
+  color: var(--app-text-2);
+  line-height: 24px;
+}
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* Channel chips: small, monospace, colored by region when on. */
+.channel-chip .mantine-Chip-label {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 500;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 6px;
+  border: 1px solid var(--app-border-strong);
+  background: transparent;
+  color: var(--app-text-3);
+}
+
+.channel-chip .mantine-Chip-label[data-checked] {
+  border-color: transparent;
+  background: var(--chip-color);
+  color: #ffffff;
+  padding: 0 6px;
+}
+
+[data-mantine-color-scheme="dark"] .channel-chip .mantine-Chip-label[data-checked] {
+  color: #06101c;
+}
+
+.channel-chip .mantine-Chip-iconWrapper {
+  display: none;
+}
+
+/* ---------- recording pages: the plot fills the screen */
+/* The recording pages fill the window below the header (52 px) and the page padding, so the
+   plot card takes all the height that is left and nothing important needs scrolling. */
+.recording-layout {
+  flex-direction: column;
+  gap: 12px;
+  height: calc(100vh - 52px - 32px);
+  min-height: 640px;
+}
+
+.summary {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 12px 16px;
+  min-height: 64px;
+  flex: none;
+}
+
+.summary-text {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.stats {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin-left: auto;
+  padding-left: 20px;
+  border-left: 1px solid var(--app-border);
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stat-label {
+  font-size: 11px;
+  color: var(--app-text-3);
+  white-space: nowrap;
+}
+
+.verdict {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.verdict.good { background: color-mix(in srgb, var(--app-real) 14%, transparent); color: var(--app-real); }
+.verdict.mixed { background: color-mix(in srgb, var(--app-note) 15%, transparent); color: var(--app-note); }
+.verdict.poor { background: color-mix(in srgb, var(--app-detected) 13%, transparent); color: var(--app-detected); }
+.verdict.neutral { background: var(--app-accent-soft); color: var(--app-accent-text); }
+
+.plot-card {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--app-border);
+}
+
+.toolbar .spacer {
+  flex: 1;
+}
+
+.eeg-graph {
+  flex: 1;
+  min-height: 0;
+  padding: 4px 4px 0;
+}
+
+.eeg-graph > div:first-child,
+.eeg-graph .dash-graph {
+  height: 100%;
+}
+
+.plot-legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--app-border);
+  font-size: 12px;
+  color: var(--app-text-2);
+}
+
+.plot-legend .hint {
+  margin-left: auto;
+}
+
+.key {
   display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
+  vertical-align: middle;
   margin-right: 6px;
 }
 
-/* Plotly range slider handles, tuned for both schemes */
+.key.square { width: 10px; height: 10px; border-radius: 2px; }
+.key.line { width: 16px; border-top: 2px solid; }
+.key.dashed { border-top-style: dashed; }
+.key.diamond { width: 8px; height: 8px; transform: rotate(45deg); }
+
+/* ---------- comparison: who wins, why, detail */
+.story {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 -4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--app-text-3);
+}
+
+.story b {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--app-accent-soft);
+  color: var(--app-accent-text);
+  font-size: 11px;
+}
+
+.model-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 12px;
+}
+
+.model-card {
+  padding: 16px 18px;
+}
+
+.model-card.winner {
+  grid-column: span 2;
+  padding: 18px 20px;
+  border-color: var(--app-accent);
+  box-shadow: 0 0 0 3px var(--app-accent-soft);
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 2px 14px;
+  font-size: 13px;
+  color: var(--app-text-2);
+}
+
+.kv b {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  color: var(--app-text);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.tag {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--app-accent-soft);
+  color: var(--app-accent-text);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.why-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.7fr);
+  gap: 12px;
+}
+
+@media (max-width: 1500px) {
+  .why-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .why-grid > :last-child { grid-column: span 2; }
+}
+
+/* ---------- tables */
+.mantine-Table-th {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--app-text-3);
+  white-space: nowrap;
+}
+
+td.best {
+  font-weight: 700;
+  color: var(--app-accent-text);
+}
+
+/* ---------- states */
+.empty {
+  display: grid;
+  place-items: center;
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--app-text-3);
+  font-size: 13px;
+}
+
+/* ---------- Plotly details */
 .rangeslider-handle-min,
 .rangeslider-handle-max {
-  fill: #94a3b8 !important;
-  stroke: #64748b !important;
+  fill: var(--app-accent) !important;
+  stroke: var(--app-accent) !important;
+}
+
+.rangeslider-mask-min,
+.rangeslider-mask-max {
+  fill: var(--app-text) !important;
+  fill-opacity: 0.08 !important;
 }
 
 .js-plotly-plot .plotly .modebar {
   right: 8px;
 }
 
-table .mono {
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
   white-space: nowrap;
 }
 
-/* Plotly dims the part of the range slider outside the view; soften it per scheme */
-[data-mantine-color-scheme="light"] .rangeslider-mask-min,
-[data-mantine-color-scheme="light"] .rangeslider-mask-max {
-  fill: #0f172a !important;
-  fill-opacity: 0.10 !important;
+/* Region hues of the channels, same values as THEMES[...]["regions"] in src/app_figures.py */
+:root,
+[data-mantine-color-scheme="light"] {
+  --region-frontal: #0d9488;
+  --region-central: #2563eb;
+  --region-temporal: #db2777;
+  --region-posterior: #0284c7;
 }
 
-[data-mantine-color-scheme="dark"] .rangeslider-mask-min,
-[data-mantine-color-scheme="dark"] .rangeslider-mask-max {
-  fill: #000000 !important;
-  fill-opacity: 0.35 !important;
+[data-mantine-color-scheme="dark"] {
+  --region-frontal: #4fd1c5;
+  --region-central: #60a5fa;
+  --region-temporal: #f472b6;
+  --region-posterior: #38bdf8;
+}
+
+/* ---------- narrower screens: secondary words go first, controls and numbers stay */
+@media (max-width: 1699px) {
+  .xl-only { display: none; }
+}
+
+@media (max-width: 1499px) {
+  .lg-only { display: none; }
+  .toolbar { gap: 4px; padding: 10px 12px; }
+  .stats { gap: 16px; padding-left: 16px; }
+  .summary { gap: 14px; }
+}
+
+/* Secondary toolbar actions: no border, but full-strength text so they do not look disabled. */
+.quiet-button {
+  color: var(--app-text);
 }

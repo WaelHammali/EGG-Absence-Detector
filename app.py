@@ -23,7 +23,7 @@ sys.path.insert(0, str(ROOT))
 
 from src import app_data
 from src.app_figures import (
-    DETECTED, EVENT, REAL, THRESHOLD, confusion_figure, curves_figure, event_shapes, message_figure, model_style,
+    confusion_figure, curves_figure, event_shapes, message_figure, model_style,
     patient_comparison_figure, recording_figure, resampled_dict, spectrum_figure, training_distribution_figure, view_relayout,
 )
 from src.io import CHANNELS
@@ -78,6 +78,12 @@ def icon(name: str, size: int = 18):
     return DashIconify(icon=name, width=size)
 
 
+def key(shape: str, color: str, text: str):
+    """Legend entry: a small mark in a meaning color, always followed by its label."""
+    style = {"borderColor": color} if shape in ("line", "line dashed") else {"background": color}
+    return html.Span([html.Span(className=f"key {shape}", style=style), text])
+
+
 def tip(label: str, child, block: bool = False, **kwargs):
     """Every control carries a one-sentence explanation.
 
@@ -85,7 +91,7 @@ def tip(label: str, child, block: bool = False, **kwargs):
     """
     if block:
         kwargs["boxWrapperProps"] = {"w": "100%", "display": "block"}
-    return dmc.Tooltip(label=label, children=child, multiline=True, w=260, withArrow=True, openDelay=350, **kwargs)
+    return dmc.Tooltip(label=label, children=child, multiline=True, w=250, withArrow=True, openDelay=600, fz="xs", **kwargs)
 
 
 def wide_tip(label: str, child):
@@ -93,15 +99,11 @@ def wide_tip(label: str, child):
 
 
 def section(text: str):
-    return dmc.Text(text, className="section-label", c="dimmed")
+    return html.Span(text, className="section-label")
 
 
 def panel(children, **kwargs):
-    return dmc.Paper(children, className="panel", p="md", **kwargs)
-
-
-def swatch(color: str, text: str):
-    return html.Span([html.Span(className="swatch", style={"background": color}), text])
+    return dmc.Paper(children, className="panel", p=16, **kwargs)
 
 
 def seconds(value) -> str:
@@ -153,62 +155,70 @@ def intervals_table(matches: pd.DataFrame):
 
 
 def header():
+    segment = {"radius": "md", "size": "sm"}
     return dmc.AppShellHeader(
-        dmc.Group(
+        html.Div(
             [
-                dmc.Group(
-                    [
-                        dmc.ThemeIcon(icon("mdi:brain", 22), size=38, radius="md", variant="light", color="teal"),
-                        dmc.Stack(
-                            [
-                                dmc.Text("EEG Absence Detector", fw=700, size="lg", lh=1.1),
-                                dmc.Text("Visualise the EEG, test a model on a patient, compare models", size="xs", c="dimmed", visibleFrom="xl"),
-                            ],
-                            gap=0,
-                        ),
+                html.Div([html.Span(icon("tabler:activity-heartbeat", 16), className="brand-mark"), "EEG Absence Detector"], className="brand"),
+                dmc.SegmentedControl(
+                    id="page", value="visualisation", className="page-tabs", withItemsBorders=False, transitionDuration=0,
+                    data=[
+                        {"value": "visualisation", "label": "Visualisation"},
+                        {"value": "prediction", "label": "Prediction"},
+                        {"value": "comparison", "label": "Comparison"},
                     ],
-                    gap="sm", wrap="nowrap",
                 ),
-                dmc.Group(
-                    [
-                        tip(
-                            "Visualisation shows the data and the real seizures; Prediction adds a model's detections; Comparison puts the models side by side.",
-                            dmc.SegmentedControl(
-                                id="page", value="visualisation", radius="md",
-                                data=[
-                                    {"value": "visualisation", "label": "Visualisation"},
-                                    {"value": "prediction", "label": "Prediction"},
-                                    {"value": "comparison", "label": "Comparison"},
-                                ],
+                html.Div(style={"flex": 1}),
+                html.Div(
+                    dmc.Group(
+                        [
+                            dmc.Text("Model", className="section-label"),
+                            tip(
+                                "Algorithm of the model used in Prediction.",
+                                dmc.SegmentedControl(
+                                    id="algo", value=DATA.default_model.split("_")[0], withItemsBorders=False, **segment,
+                                    data=[{"value": key, "label": label} for key, label in app_data.ALGORITHM_SHORT.items()],
+                                ),
                             ),
-                        ),
-                        tip(
-                            "Algorithm of the model used in Prediction.",
-                            dmc.SegmentedControl(
-                                id="algo", value=DATA.default_model.split("_")[0], radius="md", size="xs",
-                                data=[{"value": key, "label": label} for key, label in app_data.ALGORITHM_SHORT.items()],
+                            tip(
+                                "Training mode: Unbalanced trains on the real class proportions (about 96 % / 4 %); Balanced trains on as many normal windows as seizure windows (50 / 50).",
+                                dmc.SegmentedControl(
+                                    id="train-mode", value=DATA.default_model.split("_")[1], withItemsBorders=False, **segment,
+                                    data=[{"value": key, "label": label} for key, label in app_data.MODES.items()],
+                                ),
                             ),
-                        ),
-                        tip(
-                            "Training mode: Unbalanced trains on the real class proportions (about 96 % / 4 %); Balanced trains on as many normal windows as seizure windows (50 / 50).",
-                            dmc.SegmentedControl(
-                                id="train-mode", value=DATA.default_model.split("_")[1], radius="md", size="xs",
-                                data=[{"value": key, "label": label} for key, label in app_data.MODES.items()],
-                            ),
-                        ),
-                        html.Div(id="active-model"),
-                        tip(
-                            "Toggle between the dark monitor theme and a light theme suited to report screenshots.",
-                            dmc.ActionIcon(icon("tabler:sun", 20), id="theme-toggle", variant="default", size="lg", radius="md", **{"aria-label": "Toggle color scheme"}),
-                        ),
-                    ],
-                    gap="sm", wrap="nowrap",
+                        ],
+                        gap="sm", wrap="nowrap",
+                    ),
+                    id="model-controls", style={"display": "none"},
+                ),
+                # Read by screen readers; the header controls already show the active model.
+                html.Div(id="active-model", className="visually-hidden"),
+                tip(
+                    "Switch between the light theme and the dark theme.",
+                    dmc.ActionIcon(icon("tabler:moon", 18), id="theme-toggle", variant="default", size="lg", radius="md", **{"aria-label": "Toggle color scheme"}),
                 ),
             ],
-            justify="space-between", h="100%", px="md", wrap="nowrap",
+            className="app-header",
         ),
         className="shell-surface",
     )
+
+
+# Scalp regions shown in the channel selector, with the plot color of each.
+CHANNEL_REGIONS = [("Frontal", "frontal"), ("Central", "central"), ("Temporal", "temporal"), ("Parietal", "posterior"), ("Occipital", "posterior")]
+
+
+def channel_chips():
+    """The 19 channels as toggle chips, one row per scalp region, colored like their curves."""
+    rows = []
+    for (region, hue), group in zip(CHANNEL_REGIONS, CHANNEL_GROUPS):
+        chips = [
+            dmc.Chip(channel, value=channel, size="xs", className="channel-chip", style={"--chip-color": f"var(--region-{hue})"})
+            for channel in group["items"]
+        ]
+        rows.append(html.Div([html.Span(region), html.Div(chips, className="chip-row")], className="region-row"))
+    return dmc.ChipGroup(rows, id="channels", multiple=True, value=list(CHANNELS))
 
 
 def sidebar():
@@ -217,141 +227,127 @@ def sidebar():
     ]
     return dmc.AppShellNavbar(
         dmc.ScrollArea(
-            dmc.Stack(
+            html.Div(
                 [
-                    section("Patient"),
-                    wide_tip(
-                        "Choose the patient (recording) to look at; the label shows sex and age.",
-                        html.Div(
-                            dmc.Select(
-                                id="recording", data=recordings, value=recordings[0]["value"], searchable=True, allowDeselect=False,
-                                leftSection=icon("tabler:user", 16), comboboxProps={"withinPortal": True},
-                            )
-                        ),
+                    html.Div(
+                        [
+                            section("Patient"),
+                            wide_tip(
+                                "Choose the patient (recording) to look at; the label shows sex and age.",
+                                html.Div(
+                                    dmc.Select(
+                                        id="recording", data=recordings, value=recordings[0]["value"], searchable=True, allowDeselect=False,
+                                        comboboxProps={"withinPortal": True}, className="mono",
+                                    )
+                                ),
+                            ),
+                            html.Div(id="recording-info"),
+                        ],
+                        className="group",
                     ),
                     html.Div(
-                        dmc.Stack(
+                        html.Div(
                             [
-                                dmc.Divider(),
-                                section("Prediction"),
-                            dmc.Stack(
-                                [
-                                    dmc.Group(
-                                        [
-                                            dmc.Text("Probability threshold", size="sm", fw=500),
-                                            dmc.Group(
-                                                [
-                                                    dmc.Text(id="threshold-value", className="mono", size="sm", c="violet"),
-                                                    tip(
-                                                        "Reset the threshold to the best value for the selected model (the one giving the highest event-level F1).",
-                                                        dmc.ActionIcon(icon("tabler:restore", 16), id="threshold-reset", variant="subtle", color="gray", size="sm", **{"aria-label": "Reset threshold"}),
-                                                    ),
-                                                ],
-                                                gap=4,
-                                            ),
-                                        ],
-                                        justify="space-between",
-                                    ),
-                                    wide_tip(
-                                        "A window counts as seizure when its probability reaches this value; detections and metrics update live.",                                html.Div(
-                                            dmc.Slider(
-                                                id="threshold", min=0.05, max=0.99, step=0.01, value=DATA.best_threshold(DATA.default_model), color="violet",
-                                                updatemode="mouseup", precision=2,
-                                                marks=[{"value": 0.25, "label": "0.25"}, {"value": 0.5, "label": "0.50"}, {"value": 0.75, "label": "0.75"}],
-                                            ),
-                                            style={"paddingBottom": 18},
+                                html.Div(
+                                    [
+                                        section("Threshold"),
+                                        html.Span(
+                                            style={"display": "inline-flex", "alignItems": "center", "whiteSpace": "nowrap"},
+                                            children=[
+                                                dmc.Text(id="threshold-value", className="mono", size="sm", fw=600, span=True, style={"color": "var(--app-threshold)"}),
+                                                tip(
+                                                    "Reset the threshold to the best value for the selected model (the one giving the highest event-level F1).",
+                                                    dmc.Button("reset", id="threshold-reset", variant="subtle", size="compact-xs", ml=4),
+                                                ),
+                                            ]
                                         ),
+                                    ],
+                                    className="row",
+                                ),
+                                wide_tip(
+                                    "A window counts as seizure when its probability reaches this value; detections and scores update live.",
+                                    html.Div(
+                                        dmc.Slider(
+                                            id="threshold", min=0.05, max=0.99, step=0.01, value=DATA.best_threshold(DATA.default_model), color="violet",
+                                            updatemode="mouseup", precision=2, size="sm",
+                                            marks=[{"value": 0.05, "label": "0.05"}, {"value": 0.5, "label": "0.50"}, {"value": 0.99, "label": "0.99"}],
+                                        ),
+                                        style={"padding": "2px 6px 18px"},
                                     ),
-                                ],
-                                gap=6,
-                            ),
+                                ),
                             ],
-                            gap="md",
+                            className="group",
                         ),
                         id="prediction-controls", style={"display": "none"},
                     ),
                     html.Div(
-                        dmc.Stack(
+                        html.Div(
                             [
-                                dmc.Divider(),
-                                section("Display"),
-                                wide_tip(
-                                    "Stacked shows one row per channel like an EEG reader; Overlay draws the selected channels on one axis.",                                    dmc.SegmentedControl(
-                                        id="mode", value="stacked", fullWidth=True,
-                                        data=[{"value": "stacked", "label": "All stacked"}, {"value": "overlay", "label": "Overlay"}],
-                                    ),
-                                ),
-                                dmc.Group(
+                                html.Div(
                                     [
-                                        dmc.Text("Channels", size="sm", fw=500),
-                                        tip(
-                                            "Show every channel again.",
-                                            dmc.Button("Show all", id="all-channels", variant="subtle", size="compact-xs", leftSection=icon("tabler:list-check", 12)),
+                                        html.Div(
+                                            [
+                                                html.Span(id="channel-count", className="section-label"),
+                                                tip("Show every channel again.", dmc.Button("Show all", id="all-channels", variant="subtle", size="compact-xs")),
+                                            ],
+                                            className="row",
                                         ),
+                                        wide_tip("Curves to display, by scalp region: click a channel to hide or show it.", html.Div(channel_chips())),
                                     ],
-                                    justify="space-between", mb=-8,
+                                    className="group",
                                 ),
-                                wide_tip(
-                                    "Curves to display, listed by scalp region: remove a channel with its ×, or pick one from the list to add it back.",                                    html.Div(
-                                        dmc.MultiSelect(
-                                            id="channels", data=CHANNEL_GROUPS, value=list(CHANNELS), clearable=False, maxDropdownHeight=320,
-                                            leftSection=icon("tabler:wave-sine", 16), comboboxProps={"withinPortal": True},
-                                        )
-                                    ),
-                                ),
-                                dmc.Stack(
+                                html.Div(
                                     [
-                                        dmc.Text("Page length", size="sm", fw=500),
+                                        section("View"),
                                         wide_tip(
-                                            "Duration shown on screen; use the page buttons or the ← → keys to move by one page.",                                            dmc.SegmentedControl(
-                                                id="page-length", value="30", fullWidth=True,
+                                            "Stacked shows one row per channel like an EEG reader; Overlay draws the selected channels on one axis.",
+                                            dmc.SegmentedControl(
+                                                id="mode", value="stacked", fullWidth=True, size="sm", withItemsBorders=False,
+                                                data=[{"value": "stacked", "label": "All stacked"}, {"value": "overlay", "label": "Overlay"}],
+                                            ),
+                                        ),
+                                        dmc.Text("Page length", className="caption", mt=4),
+                                        wide_tip(
+                                            "Duration shown on screen; use the page buttons or the ← → keys to move by one page.",
+                                            dmc.SegmentedControl(
+                                                id="page-length", value="30", fullWidth=True, size="sm", withItemsBorders=False,
                                                 data=[{"value": value, "label": label} for label, value in PAGE_LENGTHS],
                                             ),
                                         ),
-                                    ],
-                                    gap=6,
-                                ),
-                                dmc.Stack(
-                                    [
-                                        dmc.Text("Gain", size="sm", fw=500),
+                                        dmc.Text("Gain", className="caption", mt=4),
                                         wide_tip(
-                                            "Amplitude scale: higher gain magnifies the traces, the same for every channel.",                                            html.Div(
+                                            "Amplitude scale: higher gain magnifies the traces, the same for every channel.",
+                                            html.Div(
                                                 dmc.Slider(
-                                                    id="gain", min=0, max=4, step=1, value=1, updatemode="mouseup", showLabelOnHover=False, label=None,
+                                                    id="gain", min=0, max=4, step=1, value=1, updatemode="mouseup", showLabelOnHover=False, label=None, size="sm",
                                                     marks=[{"value": index, "label": label} for index, label in enumerate(["×0.5", "×1", "×2", "×4", "×8"])],
                                                 ),
-                                                style={"paddingBottom": 18},
+                                                style={"padding": "2px 8px 18px"},
                                             ),
                                         ),
                                     ],
-                                    gap=6,
+                                    className="group",
                                 ),
-                                tip(
-                                    "Show the technician's notes from the recording header (HPN, SLI, eyes open/closed, artifacts, movements).",
-                                    html.Div(dmc.Switch(id="events", checked=True, label="Technician events", color="yellow")),
-                                ),
-                                tip(
-                                    "Show ECG, EMG and SLI in gray under the EEG. They are reference traces only: no model uses them. EMG exists in 6 recordings; a constant SLI is not drawn.",
-                                    html.Div(dmc.Switch(id="reference", checked=False, label="Reference channels (ECG, EMG, SLI)", color="gray")),
+                                html.Div(
+                                    [
+                                        tip(
+                                            "Show the technician's notes from the recording header (HPN, SLI, eyes open/closed, artifacts, movements).",
+                                            html.Div(dmc.Switch(id="events", checked=True, label="Technician events", size="sm")),
+                                        ),
+                                        tip(
+                                            "Show ECG, EMG and SLI in gray under the EEG. They are reference traces only: no model uses them. EMG exists in 6 recordings; a constant SLI is not drawn.",
+                                            html.Div(dmc.Switch(id="reference", checked=False, label="Reference channels (ECG, EMG, SLI)", size="sm")),
+                                        ),
+                                    ],
+                                    className="group",
                                 ),
                             ],
-                            gap="md",
+                            className="sidebar", style={"padding": 0},
                         ),
                         id="recording-controls",
                     ),
-                    dmc.Divider(),
-                    section("Legend"),
-                    dmc.Stack(
-                        [
-                            dmc.Text(swatch(REAL, "Real seizure (annotation), also drawn on the curves"), size="sm"),
-                            dmc.Text(swatch(DETECTED, "Detection by the model"), size="sm"),
-                            dmc.Text(swatch(EVENT, "Technician note"), size="sm"),
-                            dmc.Text(swatch(THRESHOLD, "Threshold"), size="sm"),
-                        ],
-                        gap=4,
-                    ),
                 ],
-                gap="md", p="md",
+                className="sidebar",
             ),
             type="auto", h="100%",
         ),
@@ -368,6 +364,7 @@ def comparison_page():
         dcc.Graph(id=identifier, config={"displaylogo": False, "displayModeBar": False}),
         delay_show=300, overlay_style={"visibility": "visible", "opacity": 0.5}, type="dot",
     )
+    step = lambda number, text: html.Div([html.B(str(number)), text], className="story")
     return html.Div(
         dmc.Stack(
             [
@@ -375,26 +372,11 @@ def comparison_page():
                     [
                         dmc.Group(
                             [
-                                dmc.Stack(
-                                    [
-                                        dmc.Text("Models to compare", fw=600),
-                                        dmc.Text(
-                                            "Each model at its own best threshold, tested on patients it never saw during training. One color per algorithm; solid = unbalanced, dashed or hatched = balanced.",
-                                            size="sm", c="dimmed",
-                                        ),
-                                    ],
-                                    gap=0,
-                                ),
-                                dmc.Badge("Out-of-fold predictions", variant="light", color="gray", leftSection=icon("tabler:shield-check", 12)),
-                            ],
-                            justify="space-between", align="flex-start", mb="sm",
-                        ),
-                        dmc.Group(
-                            [
+                                html.Span("Compare", className="card-title"),
                                 tip(
                                     "Same training mode compares the 4 algorithms; Same algorithm compares unbalanced with balanced; All models shows the 8; Custom keeps the list you edit.",
                                     dmc.SegmentedControl(
-                                        id="cmp-preset", value="mode", radius="md",
+                                        id="cmp-preset", value="mode", radius="md", size="sm", withItemsBorders=False,
                                         data=[
                                             {"value": "mode", "label": "Same training mode"},
                                             {"value": "algorithm", "label": "Same algorithm, both modes"},
@@ -407,7 +389,7 @@ def comparison_page():
                                     tip(
                                         "Training mode whose 4 algorithms are compared.",
                                         dmc.SegmentedControl(
-                                            id="cmp-training", value="unbalanced", radius="md",
+                                            id="cmp-training", value="unbalanced", radius="md", size="sm", withItemsBorders=False,
                                             data=[{"value": key, "label": label} for key, label in app_data.MODES.items()],
                                         ),
                                     ),
@@ -417,12 +399,14 @@ def comparison_page():
                                     tip(
                                         "Algorithm whose two training modes are compared.",
                                         dmc.SegmentedControl(
-                                            id="cmp-algo", value="rf", radius="md",
+                                            id="cmp-algo", value="rf", radius="md", size="sm", withItemsBorders=False,
                                             data=[{"value": key, "label": label} for key, label in app_data.ALGORITHM_SHORT.items()],
                                         ),
                                     ),
                                     id="cmp-algo-box", style={"display": "none"},
                                 ),
+                                html.Div(style={"flex": 1}),
+                                html.Span("Each model at its own best threshold, on patients it never saw during training.", className="hint"),
                             ],
                             gap="sm",
                         ),
@@ -431,7 +415,7 @@ def comparison_page():
                             html.Div(
                                 dmc.MultiSelect(
                                     id="cmp-models", data=model_options, value=[f"{key}_unbalanced" for key in app_data.ALGORITHMS],
-                                    clearable=False, mt="sm", leftSection=icon("tabler:cpu", 16), comboboxProps={"withinPortal": True}, maxDropdownHeight=360,
+                                    clearable=False, mt="sm", size="sm", comboboxProps={"withinPortal": True}, maxDropdownHeight=360,
                                 )
                             ),
                         ),
@@ -441,23 +425,28 @@ def comparison_page():
                 html.Div(
                     dmc.Stack(
                         [
-                            dmc.SimpleGrid(id="cmp-cards", cols={"base": 1, "sm": 2, "xl": 4}, spacing="md"),
+                            step(1, "Who wins"),
+                            html.Div(id="cmp-cards", className="model-cards"),
+                            step(2, "Why"),
+                            html.Div(
+                                [
+                                    panel([card_title("Event F1 against the threshold", "dot = best threshold of each model"), graph("cmp-f1")]),
+                                    panel([card_title("Precision–recall curves", "per 2 s window; dot = best threshold"), graph("cmp-pr")]),
+                                    panel([card_title("Training data of each mode", "average of the 5 training folds"), graph("cmp-distribution"), html.Div("Tests always keep the real proportions.", className="hint")]),
+                                ],
+                                className="why-grid",
+                            ),
+                            step(3, "Detail"),
                             panel(
                                 [
                                     dmc.Group(
                                         [
-                                            dmc.Stack(
-                                                [
-                                                    dmc.Text("Ranking", fw=600),
-                                                    dmc.Text("All patients together. The best value of each column is highlighted.", size="sm", c="dimmed"),
-                                                ],
-                                                gap=0,
-                                            ),
+                                            html.Div([html.Div("Ranking", className="card-title"), html.Div("All patients together. The best value of each column is highlighted.", className="caption")]),
                                             tip(
                                                 "Column used to sort the ranking; scores sort from highest, errors and false alarms from lowest.",
                                                 html.Div(
                                                     dmc.Select(
-                                                        id="cmp-sort", value="event_f1", allowDeselect=False, w=230, leftSection=icon("tabler:arrows-sort", 16),
+                                                        id="cmp-sort", value="event_f1", allowDeselect=False, w=230, size="sm",
                                                         data=[{"value": key, "label": f"Sort by {label}"} for key, (label, *_rest) in RANKING.items()],
                                                         comboboxProps={"withinPortal": True},
                                                     )
@@ -469,40 +458,7 @@ def comparison_page():
                                     html.Div(id="cmp-ranking"),
                                 ]
                             ),
-                            dmc.Grid(
-                                [
-                                    dmc.GridCol(
-                                        panel(
-                                            [card_title("Event F1 against the threshold", "dot = best threshold of each model"), graph("cmp-f1")], h="100%",
-                                        ),
-                                        span={"base": 12, "lg": 6},
-                                    ),
-                                    dmc.GridCol(
-                                        panel(
-                                            [card_title("Precision–recall curves", "per 2 s window; dot = best threshold"), graph("cmp-pr")], h="100%",
-                                        ),
-                                        span={"base": 12, "lg": 6},
-                                    ),
-                                ],
-                                gutter="md",
-                            ),
-                            dmc.Grid(
-                                [
-                                    dmc.GridCol(
-                                        panel(
-                                            [card_title("Training data of each mode", "average of the 5 training folds"), graph("cmp-distribution")], h="100%",
-                                        ),
-                                        span={"base": 12, "lg": 5},
-                                    ),
-                                    dmc.GridCol(
-                                        panel(
-                                            [card_title("Confusion matrices", "2 s windows at each model's best threshold; % of the true class"), graph("cmp-confusion")], h="100%",
-                                        ),
-                                        span={"base": 12, "lg": 7},
-                                    ),
-                                ],
-                                gutter="md",
-                            ),
+                            panel([card_title("Confusion matrices", "2 s windows at each model's best threshold; % of the true class"), graph("cmp-confusion")]),
                             panel([html.Div(id="cmp-timeline-title"), graph("cmp-timeline")]),
                             panel(
                                 [
@@ -511,12 +467,12 @@ def comparison_page():
                                 ]
                             ),
                         ],
-                        gap="md",
+                        gap=12,
                     ),
                     id="cmp-body",
                 ),
             ],
-            gap="md",
+            gap=12,
         ),
         id="page-overview", style={"display": "none"},
     )
@@ -524,79 +480,52 @@ def comparison_page():
 
 def recording_page():
     button = {"variant": "default", "size": "compact-sm", "radius": "md"}
+    quiet = {"variant": "subtle", "color": "gray", "size": "compact-sm", "radius": "md", "className": "quiet-button"}
+    drawer = {"position": "right", "withOverlay": False, "lockScroll": False, "closeOnClickOutside": False, "keepMounted": True, "trapFocus": False, "padding": "md"}
     return html.Div(
-        dmc.Stack(
-            [
-                panel([html.Div(id="recording-info"), html.Div(id="verdict")]),
-                html.Div(id="model-overview"),
-                panel(
-                    [
-                        dmc.Group(
-                            [
-                                dmc.Group(
-                                    [
-                                        tip("Go back one page (← key).", dmc.Button("Page", id="prev-page", leftSection=icon("tabler:chevron-left", 14), **button)),
-                                        tip("Go forward one page (→ key).", dmc.Button("Page", id="next-page", rightSection=icon("tabler:chevron-right", 14), **button)),
-                                        dmc.Divider(orientation="vertical"),
-                                        tip("Center the view on the previous annotated seizure.", dmc.Button("Seizure", id="prev-seizure", leftSection=icon("tabler:player-skip-back", 14), **button)),
-                                        tip("Center the view on the next annotated seizure.", dmc.Button("Seizure", id="next-seizure", rightSection=icon("tabler:player-skip-forward", 14), **button)),
-                                        dmc.Group([dmc.Kbd("←"), dmc.Kbd("→"), dmc.Text("page", size="xs", c="dimmed")], gap=4, visibleFrom="lg"),
-                                    ],
-                                    gap="xs",
-                                ),
-                                dmc.Group(
-                                    [
-                                        dmc.Text(id="view-label", className="mono", size="sm", c="dimmed"),
-                                        tip("Save the current view as a high-resolution PNG for the report.", dmc.Button("Save view as PNG", id="save-png", leftSection=icon("tabler:camera", 14), **button)),
-                                        tip("Download the seizure intervals of this patient as a CSV file (with the detections in Prediction).", dmc.Button("Download intervals CSV", id="save-csv", leftSection=icon("tabler:download", 14), **button)),
-                                    ],
-                                    gap="xs",
-                                ),
-                            ],
-                            justify="space-between", mb="xs",
+        [
+            html.Div([html.Div(id="verdict", className="summary-text"), html.Div(id="model-overview")], className="panel summary"),
+            html.Div(
+                [
+                    html.Div(
+                        [
+                            tip("Go back one page (← key).", dmc.Button("Page", id="prev-page", leftSection=icon("tabler:chevron-left", 14), **button)),
+                            tip("Go forward one page (→ key).", dmc.Button("Page", id="next-page", rightSection=icon("tabler:chevron-right", 14), **button)),
+                            tip("Center the view on the previous annotated seizure.", dmc.Button("Seizure", id="prev-seizure", leftSection=icon("tabler:player-skip-back", 14), **button)),
+                            tip("Center the view on the next annotated seizure.", dmc.Button("Seizure", id="next-seizure", rightSection=icon("tabler:player-skip-forward", 14), **button)),
+                            html.Span(dmc.Group([dmc.Kbd("←", size="xs"), dmc.Kbd("→", size="xs")], gap=4), className="lg-only"),
+                            dmc.Text(id="view-label", className="mono", size="sm", c="dimmed", ml=6),
+                            html.Div(className="spacer"),
+                            tip("Frequency content of the 2 s window you clicked on a curve.", dmc.Button("Spectrum", id="open-spectrum", leftSection=icon("tabler:chart-histogram", 14), **quiet)),
+                            tip("List of the seizures of this patient, with the model's detections in Prediction.", dmc.Button("Intervals", id="open-intervals", leftSection=icon("tabler:list-details", 14), **quiet)),
+                            tip("Save the current view as a high-resolution PNG for the report.", dmc.Button(["Save ", html.Span("view as ", className="lg-only"), "PNG"], id="save-png", leftSection=icon("tabler:camera", 14), **button)),
+                            tip("Download the seizure intervals of this patient as a CSV file (with the detections in Prediction).", dmc.Button([html.Span("Download intervals ", className="lg-only"), "CSV"], id="save-csv", leftSection=icon("tabler:download", 14), **button)),
+                        ],
+                        className="toolbar",
+                    ),
+                    dcc.Loading(
+                        dcc.Graph(
+                            id="eeg", responsive=True, style={"height": "100%", "width": "100%"},
+                            config={"displaylogo": False, "scrollZoom": False, "responsive": True, "displayModeBar": "hover", "modeBarButtonsToRemove": ["select2d", "lasso2d", "autoScale2d", "toImage"]},
                         ),
-                        dcc.Loading(
-                            dcc.Graph(
-                                id="eeg", config={"displaylogo": False, "scrollZoom": False, "modeBarButtonsToRemove": ["select2d", "lasso2d", "autoScale2d"]},
-                            ),
-                            delay_show=400, overlay_style={"visibility": "visible", "opacity": 0.5}, type="dot", target_components={"eeg": "figure"},
-                        ),
-                        dmc.Text(
-                            "Curves turn green during a real seizure and a diamond marks each seizure start. Drag to zoom in time, double-click to reset, drag the slider under the bottom plot to navigate. Click a curve to analyze that 2 s window.",
-                            size="xs", c="dimmed", mt=4,
-                        ),
-                    ]
-                ),
-                dmc.Grid(
-                    [
-                        dmc.GridCol(
-                            panel(
-                                [
-                                    dmc.Text("Spectrum of the selected window", fw=600),
-                                    dmc.Text(id="spectrum-caption", size="sm", c="dimmed"),
-                                    dcc.Graph(id="spectrum", config={"displaylogo": False, "displayModeBar": False}),
-                                    html.Div(id="spectrum-bands"),
-                                ],
-                                h="100%",
-                            ),
-                            span={"base": 12, "xl": 5},
-                        ),
-                        dmc.GridCol(
-                            panel(
-                                [
-                                    html.Div(id="intervals"),
-                                ],
-                                h="100%",
-                            ),
-                            span={"base": 12, "xl": 7},
-                        ),
-                    ],
-                    gutter="md",
-                ),
-            ],
-            gap="md",
-        ),
-        id="page-recording",
+                        delay_show=400, overlay_style={"visibility": "visible", "opacity": 0.5}, type="dot", target_components={"eeg": "figure"},
+                        parent_className="eeg-graph",
+                    ),
+                    html.Div(id="plot-legend", className="plot-legend"),
+                ],
+                className="panel plot-card",
+            ),
+            dmc.Drawer(
+                [
+                    dmc.Text(id="spectrum-caption", className="caption"),
+                    dcc.Graph(id="spectrum", config={"displaylogo": False, "displayModeBar": False}),
+                    html.Div(id="spectrum-bands"),
+                ],
+                id="spectrum-drawer", title=html.Span("Spectrum of the selected window", className="card-title"), size=620, **drawer,
+            ),
+            dmc.Drawer(html.Div(id="intervals"), id="intervals-drawer", title=html.Span("Intervals", className="card-title"), size=700, **drawer),
+        ],
+        id="page-recording", className="recording-layout",
     )
 
 
@@ -604,10 +533,13 @@ def layout():
     theme = {
         "fontFamily": "Inter, system-ui, -apple-system, Segoe UI, sans-serif",
         "fontFamilyMonospace": "JetBrains Mono, ui-monospace, monospace",
-        "primaryColor": "teal",
+        "primaryColor": "brand",
+        "primaryShade": {"light": 6, "dark": 4},
         "defaultRadius": "md",
         "colors": {
-            "dark": ["#E5E9F0", "#C3CCDB", "#94A3B8", "#64748B", "#2A3756", "#1E2A44", "#111A2E", "#0B1220", "#080E1A", "#050912"],
+            # Accent of the interface (deep teal), used for selection, focus and "best" highlights.
+            "brand": ["#E6F4F6", "#C5E4E9", "#9DD0D9", "#6FB9C6", "#4FD1C5", "#1D8799", "#0B7285", "#0A6072", "#084F5E", "#063E4A"],
+            "dark": ["#E6EAF2", "#C3CCDB", "#A3AEC2", "#6B7890", "#2A3550", "#1B2538", "#101827", "#0A0F1C", "#070B15", "#04070E"],
         },
     }
     if LOAD_ERROR:
@@ -615,12 +547,12 @@ def layout():
             dmc.Alert(LOAD_ERROR, title="The app data is not ready yet", color="yellow", icon=icon("tabler:database-off"), maw=720),
             h="100vh", p="xl",
         )
-        return dmc.MantineProvider(body, forceColorScheme="dark", theme=theme, id="provider")
+        return dmc.MantineProvider(body, forceColorScheme="light", theme=theme, id="provider")
     return dmc.MantineProvider(
         [
             dcc.Location(id="url"),
             dcc.Store(id="session", data=uuid.uuid4().hex),
-            dcc.Store(id="theme", data="dark"),
+            dcc.Store(id="theme", data="light"),
             dcc.Store(id="model", data=DATA.default_model),
             dcc.Store(id="view"),
             dcc.Store(id="figure-meta"),
@@ -640,10 +572,10 @@ def layout():
                         ]
                     ),
                 ],
-                header={"height": 60}, navbar={"width": 300, "breakpoint": "sm"}, padding="md",
+                header={"height": 52}, navbar={"width": 272, "breakpoint": "sm"}, padding={"base": 12, "lg": 16},
             ),
         ],
-        id="provider", forceColorScheme="dark", theme=theme,
+        id="provider", forceColorScheme="light", theme=theme,
     )
 
 
@@ -680,34 +612,64 @@ def shell_state(search, _, theme):
 
 @app.callback(Output("provider", "forceColorScheme"), Output("theme-toggle", "children"), Input("theme", "data"))
 def apply_theme(theme):
-    return theme, icon("tabler:sun" if theme == "dark" else "tabler:moon", 20)
+    return theme, icon("tabler:sun" if theme == "dark" else "tabler:moon", 18)
 
 
 @app.callback(
     Output("page-overview", "style"), Output("page-recording", "style"),
-    Output("recording-controls", "style"), Output("prediction-controls", "style"),
+    Output("recording-controls", "style"), Output("prediction-controls", "style"), Output("model-controls", "style"),
     Input("page", "value"),
 )
 def show_page(page):
     shown, hidden = {"display": "block"}, {"display": "none"}
     if page == "comparison":
-        # No model to choose here: the four are always shown together.
-        return shown, hidden, hidden, hidden
-    return hidden, shown, shown, (shown if page == "prediction" else hidden)
+        # No model to choose here: they are always shown together.
+        return shown, hidden, hidden, hidden, hidden
+    prediction = shown if page == "prediction" else hidden
+    return hidden, {"display": "flex"}, shown, prediction, prediction
 
 
-@app.callback(Output("model", "data"), Output("active-model", "children"), Input("algo", "value"), Input("train-mode", "value"), Input("theme", "data"))
-def choose_model(algorithm, mode, theme):
+@app.callback(Output("model", "data"), Output("active-model", "children"), Input("algo", "value"), Input("train-mode", "value"))
+def choose_model(algorithm, mode):
     model = f"{algorithm}_{mode}"
-    style = model_style(model, theme)
-    badge = tip(
-        "Model currently used in Prediction. Line style in Comparison: solid = unbalanced, dashed = balanced.",
-        dmc.Badge(
-            DATA.label(model), variant="light", color="gray", radius="md", size="lg", tt="none", visibleFrom="lg",
-            leftSection=html.Span(style={"display": "inline-block", "width": 14, "borderTop": f"3px {'dashed' if mode == 'balanced' else 'solid'} {style['color']}"}),
-        ),
-    )
-    return model, badge
+    return model, f"Active model: {DATA.label(model)}"
+
+
+@app.callback(Output("channel-count", "children"), Input("channels", "value"))
+def channel_count(channels):
+    return f"Channels · {len(channels or [])} of {len(CHANNELS)}"
+
+
+@app.callback(Output("plot-legend", "children"), Input("page", "value"), Input("events", "checked"), Input("reference", "checked"), Input("mode", "value"))
+def plot_legend(page, show_events, show_reference, mode):
+    """The one legend of the EEG plot, listing only what is drawn."""
+    entries = [key("square", "var(--app-real)", "Real seizure (annotation), also drawn on the curves"), key("diamond", "var(--app-real)", "Seizure start")]
+    if page == "prediction":
+        entries += [
+            key("square", "var(--app-detected)", "Detection by the model"),
+            key("line", "var(--app-text-2)", "Model probability"),
+            key("line dashed", "var(--app-threshold)", "Threshold"),
+        ]
+    if show_events:
+        entries.append(key("square", "var(--app-note)", "Technician note"))
+    if show_reference:
+        entries.append(key("line", "var(--app-text-3)", "Reference channel (not used by the model)"))
+    hint = "Drag to zoom in time · double-click to reset · drag the slider under the plot to navigate · click a curve for its spectrum"
+    return [*entries, html.Span(hint, className="hint xl-only")]
+
+
+@app.callback(
+    Output("spectrum-drawer", "opened"), Input("open-spectrum", "n_clicks"), Input("spectrum-point", "data"),
+    prevent_initial_call=True,
+)
+def open_spectrum(_, point):
+    """Opens from the toolbar, or as soon as a curve is clicked; closes when the patient changes."""
+    return True if ctx.triggered_id == "open-spectrum" else bool(point)
+
+
+@app.callback(Output("intervals-drawer", "opened"), Input("open-intervals", "n_clicks"), prevent_initial_call=True)
+def open_intervals(_):
+    return True
 
 
 @app.callback(Output("threshold-value", "children"), Input("threshold", "value"))
@@ -802,33 +764,49 @@ def comparison_summary(models, sort, theme):
         message = dmc.Alert("Choose at least one model in the list above to see the comparison.", color="gray", icon=icon("tabler:info-circle"))
         return message, {"display": "none"}, [], None
     values = {model: ranking_values(model) for model in models}
+    by_score = sorted(models, key=lambda model: values[model]["event_f1"], reverse=True)
     cards = []
-    for model in models:
+    for position, model in enumerate(by_score):
         value = values[model]
-        cards.append(
-            panel(
-                dmc.Stack(
+        algorithm, mode = model.split("_")
+        title = html.Span([model_swatch(model, theme), html.Span(app_data.ALGORITHMS[algorithm]), html.Span(f" · {app_data.MODES[mode]}", style={"color": "var(--app-text-3)", "fontWeight": 500})], className="card-title")
+        facts = html.Div(
+            [
+                html.Span("Seizures found"), html.B(f"{value['found']} of {value['found'] + value['missed']}"),
+                html.Span("False alarms"), html.B(f"{value['false_alarms']} · {value['false_alarms_per_hour']:.1f} / h"),
+                html.Span("Recall · precision"), html.B(f"{value['event_recall']:.0%} · {value['event_precision']:.0%}"),
+                html.Span("Threshold"), html.B(f"{value['threshold']:.2f}"),
+            ],
+            className="kv",
+        )
+        if position == 0 and len(models) > 1:
+            runner = by_score[1]
+            lead = value["event_f1"] - values[runner]["event_f1"]
+            reason = (
+                f"Highest event F1 of the {len(models)} models compared: {value['found']} of {value['found'] + value['missed']} seizures found with {value['false_alarms']} false alarms. "
+                f"Next is {DATA.label(runner)} at {values[runner]['event_f1']:.2f}"
+                + (", a lead of a few events only." if lead < 0.03 else ".")
+            )
+            cards.append(
+                html.Div(
                     [
-                        dmc.Group([html.Span([model_swatch(model, theme), dmc.Text(DATA.label(model), fw=600, size="sm", span=True)]), dmc.Badge(f"threshold {value['threshold']:.2f}", size="sm", variant="light", color="violet", tt="none", className="mono")], justify="space-between"),
-                        dmc.Group(
-                            [
-                                dmc.Stack([dmc.Text("Event F1", size="xs", c="dimmed", fw=600, tt="uppercase"), dmc.Text(f"{value['event_f1']:.2f}", className="mono kpi-value")], gap=0),
-                                dmc.Stack(
-                                    [
-                                        dmc.Text(f"recall {value['event_recall']:.0%} · precision {value['event_precision']:.0%}", size="xs", className="mono"),
-                                        dmc.Text(f"{value['found']} found · {value['missed']} missed", size="xs", className="mono", c="dimmed"),
-                                        dmc.Text(f"{value['false_alarms']} false alarms ({value['false_alarms_per_hour']:.1f}/h)", size="xs", className="mono", c="dimmed"),
-                                    ],
-                                    gap=0,
-                                ),
-                            ],
-                            justify="space-between", align="flex-end",
+                        html.Div([title, html.Span("Best event F1", className="tag")], className="row"),
+                        html.Div(
+                            [html.Div([html.Div("Event F1", className="section-label"), html.Div(f"{value['event_f1']:.2f}", className="hero-value")]), facts],
+                            style={"display": "flex", "alignItems": "flex-end", "gap": 28, "marginTop": 14},
                         ),
+                        html.P(reason, className="caption", style={"margin": "14px 0 0"}),
                     ],
-                    gap="xs",
+                    className="panel model-card winner",
                 )
             )
-        )
+        else:
+            cards.append(
+                html.Div(
+                    [title, html.Div([html.Div("Event F1", className="section-label"), html.Div(f"{value['event_f1']:.2f}", className="big-value")], style={"margin": "12px 0"}), facts],
+                    className="panel model-card",
+                )
+            )
     _, higher, _ = RANKING[sort]
     ordered = sorted(models, key=lambda model: (pd.isna(values[model][sort]), -values[model][sort] if higher else values[model][sort]))
     best = {}
@@ -935,12 +913,12 @@ def comparison_patients(models, recording, theme):
 
 
 def card_title(title: str, note: str):
-    return dmc.Group([dmc.Text(title, fw=600), dmc.Text(note, size="xs", c="dimmed")], justify="space-between", mb="xs")
+    return html.Div([html.Span(title, className="card-title"), html.Span(note, className="hint")], className="row", style={"marginBottom": 8})
 
 
 def real_table(real: pd.DataFrame):
     if real.empty:
-        return dmc.Text("No seizure is annotated for this patient.", c="dimmed", size="sm", py="lg", ta="center")
+        return html.Div("No seizure is annotated for this patient.", className="empty")
     rows = [
         dmc.TableTr([dmc.TableTd(cell, className="mono") for cell in (str(number), f"{row.start_s:.1f}", f"{row.end_s:.1f}", f"{row.end_s - row.start_s:.1f}")])
         for number, row in enumerate(real.itertuples(index=False), 1)
@@ -948,104 +926,90 @@ def real_table(real: pd.DataFrame):
     return dmc.TableScrollContainer(
         dmc.Table(
             [dmc.TableThead(dmc.TableTr([dmc.TableTh(name) for name in ("Seizure", "Start (s)", "End (s)", "Duration (s)")])), dmc.TableTbody(rows)],
-            striped=True, highlightOnHover=True, verticalSpacing=6, fz="sm", stickyHeader=True,
+            highlightOnHover=True, verticalSpacing=6, fz="sm", stickyHeader=True,
         ),
-        minWidth=360, mah=330, type="native",
+        minWidth=360, type="native",
     )
+
+
+VERDICT_CLASS = {"Predicts well": "good", "Partly correct": "mixed", "Predicts poorly": "poor"}
 
 
 def verdict(model: str, threshold: float, metrics: dict):
     """Plain statement of how the model did on this patient, with the rule used for the label."""
     total = metrics["tp"] + metrics["fn"]
-    label, color, icon_name = verdict_label(metrics)
+    label, _, icon_name = verdict_label(metrics)
     window = metrics["window"]
     share = lambda value: "—" if pd.isna(value) else f"{value:.0%}"
-    sentence = (
-        f"{model} at threshold {threshold:.2f} found {metrics['tp']} of {total} real seizures, missed {metrics['fn']} "
-        f"and raised {metrics['fp']} false alarm{'s' if metrics['fp'] != 1 else ''}."
-    )
-    return dmc.Stack(
+    plural = "" if metrics["fp"] == 1 else "s"
+    sentence = html.Div(
         [
-            dmc.Divider(my="sm"),
-            dmc.Group(
-                [
-                    dmc.Group(
-                        [
-                            tip(
-                                "Well: every real seizure found and no false alarm. Poorly: fewer than half found, or more than two false alarms per real seizure. Otherwise partly correct.",
-                                dmc.Badge(label, color=color, size="lg", variant="light", leftSection=icon(icon_name, 14)),
-                            ),
-                            dmc.Text(sentence, size="sm"),
-                        ],
-                        gap="sm",
-                    ),
-                    dmc.Group(
-                        [
-                            dmc.Badge(f"{metrics['tp']} found", color="teal", variant="light", leftSection=icon("tabler:check", 12)),
-                            dmc.Badge(f"{metrics['fn']} missed", color="gray", variant="light", leftSection=icon("tabler:eye-off", 12)),
-                            dmc.Badge(f"{metrics['fp']} false alarm{'s' if metrics['fp'] != 1 else ''}", color="red", variant="light", leftSection=icon("tabler:alert-triangle", 12)),
-                        ],
-                        gap="xs",
-                    ),
-                ],
-                justify="space-between",
-            ),
-            dmc.Text(
-                f"Per 2 s window: {window['tp']} seizure windows detected out of {window['tp'] + window['fn']} (recall {share(window['recall'])}); "
-                f"{window['fp']} normal windows flagged by mistake (precision {share(window['precision'])}). "
-                "The model never saw this patient during training."
-                + (" A false alarm is a detection outside the annotated seizures; it can also be a real seizure missing from the annotation file." if metrics["fp"] else ""),
-                size="xs", c="dimmed",
-            ),
-        ],
-        gap=6,
+            html.B(f"{metrics['tp']} of {total}"), f" real seizures found, ", html.B(str(metrics["fn"])), " missed, ",
+            html.B(str(metrics["fp"])), f" false alarm{plural} on this patient",
+            # The model and threshold are already shown in the header and sidebar: dropped first on narrow screens.
+            html.Span(f" with {model} at threshold {threshold:.2f}", className="xl-only"), ".",
+        ]
     )
+    detail = (
+        f"Per 2 s window: {window['tp']} of {window['tp'] + window['fn']} seizure windows detected (recall {share(window['recall'])}), "
+        f"{window['fp']} normal windows flagged by mistake (precision {share(window['precision'])}). The model never saw this patient during training."
+        + (" A false alarm can also be a real seizure missing from the annotation file." if metrics["fp"] else "")
+    )
+    return [
+        tip(
+            "Well: every real seizure found and no false alarm. Poorly: fewer than half found, or more than two false alarms per real seizure. Otherwise partly correct.",
+            html.Span([icon(icon_name, 14), label], className=f"verdict {VERDICT_CLASS[label]}"),
+        ),
+        # On narrower screens the second line is hidden and stays available as a hover text.
+        html.Div([sentence, html.Div(detail, className="hint xl-only")], style={"minWidth": 0}, title=detail),
+    ]
 
 
 @app.callback(
-    Output("recording-info", "children"), Output("verdict", "children"), Output("intervals", "children"),
+    Output("recording-info", "children"), Output("verdict", "children"), Output("intervals", "children"), Output("open-intervals", "children"),
     Input("recording", "value"), Input("threshold", "value"), Input("model", "data"), Input("page", "value"),
 )
 def recording_summary(recording, threshold, model, page):
     info = DATA.info(recording)
     minutes, rest = divmod(int(info["duration_s"]), 60)
-    facts = [
-        ("tabler:user", "Patient", recording),
-        ("tabler:gender-bigender", "Sex", {"M": "Male", "F": "Female"}.get(info["sex"], str(info["sex"]))),
-        ("tabler:cake", "Age", f"{info['age']} y"),
-        ("tabler:clock", "Duration", f"{minutes} min {rest:02d} s"),
-        ("tabler:activity", "Real seizures", f"{info['seizures']} ({info['seizure_seconds']:.0f} s)"),
-    ]
-    left = dmc.Group(
+    sex = {"M": "Male", "F": "Female"}.get(info["sex"], str(info["sex"]))
+    fallback = info["annotation_source"] == "fallback"
+    source = html.B("Earlier alignment" if fallback else "Official")
+    facts = html.Div(
         [
-            dmc.Group(
+            html.Div([html.Span("Sex · age"), html.B(f"{sex} · {info['age']} y")]),
+            html.Div([html.Span("Duration"), html.B(f"{minutes} min {rest:02d} s", className="mono")]),
+            html.Div([html.Span("Real seizures"), html.B(f"{info['seizures']} ({info['seizure_seconds']:.0f} s)", className="mono")]),
+            html.Div(
                 [
-                    dmc.ThemeIcon(icon(icon_name, 16), variant="light", color="gray", size=30),
-                    dmc.Stack([dmc.Text(label, size="xs", c="dimmed"), dmc.Text(value, className="mono", size="sm", fw=500)], gap=0),
-                ],
-                gap="xs", wrap="nowrap",
-            )
-            for icon_name, label, value in facts
+                    html.Span("Annotations"),
+                    tip("This recording is missing from the updated annotation file; its seizure times come from the earlier signal-based alignment.", source) if fallback else source,
+                ]
+            ),
+            *([html.Div([html.Span("Absence type"), html.B(info["absence_type"])], style={"gridColumn": "span 2"})] if info["absence_type"] else []),
         ],
-        gap="xl",
+        className="facts",
     )
-    badges = []
-    if info["annotation_source"] == "fallback":
-        badges.append(
-            tip(
-                "This recording is missing from the updated annotation file; its seizure times come from the earlier signal-based alignment.",
-                dmc.Badge("Fallback annotations", color="yellow", variant="light", leftSection=icon("tabler:info-circle", 12)),
-            )
-        )
-    if info["absence_type"]:
-        badges.append(dmc.Badge(f"Type: {info['absence_type']}", color="gray", variant="outline"))
-    header_row = dmc.Group([left, dmc.Group(badges, gap="xs")], justify="space-between")
+    real = DATA.real(recording)
     if page != "prediction":
-        table = [card_title("Real seizures of this patient", "from the annotations; times in seconds"), real_table(DATA.real(recording))]
-        return header_row, None, table
+        summary = [
+            html.Span([icon("tabler:wave-sine", 14), "Data only"], className="verdict neutral"),
+            html.Div(
+                [
+                    html.Div([html.B(str(len(real))), f" real seizure{'' if len(real) == 1 else 's'} annotated for this patient ({info['seizure_seconds']:.0f} s in total)."]),
+                    html.Div("No model is used here: the curves turn green during a real seizure and a diamond marks each start.", className="hint"),
+                ],
+                style={"minWidth": 0},
+            ),
+        ]
+        table = [html.Div("Real seizures of this patient, from the annotations. Times in seconds.", className="caption", style={"marginBottom": 8}), real_table(real)]
+        return facts, summary, table, f"Intervals ({len(real)})"
     _, matches, metrics = DATA.detect(recording, threshold, model)
-    table = [card_title(f"Real vs predicted — {DATA.label(model)}", "times in seconds; errors are detected − real"), intervals_table(matches)]
-    return header_row, verdict(DATA.label(model), threshold, metrics), table
+    table = [
+        html.Div(f"Real vs predicted, {DATA.label(model)} at threshold {threshold:.2f}. Times in seconds; errors are detected − real.", className="caption", style={"marginBottom": 8}),
+        intervals_table(matches),
+    ]
+    return facts, verdict(DATA.label(model), threshold, metrics), table, f"Intervals ({len(matches)})"
 
 
 @app.callback(Output("model-overview", "children"), Input("model", "data"), Input("threshold", "value"), Input("page", "value"))
@@ -1056,27 +1020,19 @@ def model_overview(model, threshold, page):
     _, _, metrics = DATA.detect_everything(threshold, model)
     total = metrics["tp"] + metrics["fn"]
     facts = [
-        ("Event F1", f"{metrics['f1']:.2f}"),
-        ("Recall", f"{metrics['recall']:.0%} ({metrics['tp']} of {total} seizures)"),
-        ("Precision", f"{metrics['precision']:.0%} of {metrics['detections']} detections"),
-        ("Missed", str(metrics["fn"])),
-        ("False alarms", f"{metrics['fp']} ({metrics['false_alarms_per_hour']:.1f} per hour)"),
+        ("Event F1", f" · all {len(DATA.recordings)} patients", f"{metrics['f1']:.2f}"),
+        ("Recall", f" · {metrics['tp']} of {total}", f"{metrics['recall']:.0%}"),
+        ("Precision", f" · of {metrics['detections']} detections", f"{metrics['precision']:.0%}"),
+        ("Missed", "", str(metrics["fn"])),
+        ("False alarms", f" · {metrics['false_alarms_per_hour']:.1f} / h", str(metrics["fp"])),
     ]
-    return panel(
-        dmc.Group(
-            [
-                dmc.Stack(
-                    [dmc.Text("This model on all 21 patients", fw=600, size="sm"), dmc.Text(f"{DATA.label(model)} at threshold {threshold:.2f}", size="xs", c="dimmed")],
-                    gap=0,
-                ),
-                dmc.Group(
-                    [dmc.Stack([dmc.Text(label, size="xs", c="dimmed"), dmc.Text(value, className="mono", size="sm", fw=500)], gap=0) for label, value in facts],
-                    gap="xl",
-                ),
-            ],
-            justify="space-between",
-        ),
-        py="sm",
+    title = f"{DATA.label(model)} at threshold {threshold:.2f}, all {len(DATA.recordings)} patients together"
+    return html.Div(
+        [
+            html.Div([html.Span([label, html.Span(detail, className="lg-only")], className="stat-label"), html.Span(value, className="value")], className="stat")
+            for label, detail, value in facts
+        ],
+        className="stats", title=title,
     )
 
 
@@ -1108,12 +1064,12 @@ def build_eeg(recording, channels, mode, gain, show_events, show_reference, them
         frame = app_data.signal(recording)
     except app_data.MissingData as error:
         FIGURES.pop(session, None)
-        return message_figure(str(error), theme, 420), None, no_update
+        return message_figure(str(error), theme, None), None, no_update
     channels = [channel for channel in CHANNELS if channel in (channels or [])]
     if not channels:
         # No curves on screen: forget the old figure so that paging cannot update a plot that is gone.
         FIGURES.pop(session, None)
-        return message_figure("Select at least one channel to display the EEG.", theme, 420), None, no_update
+        return message_figure("Select at least one channel to display the EEG.", theme, None), None, no_update
     duration = float(DATA.info(recording)["duration_s"])
     if view is None or view.get("recording") != recording:
         view_range = clamp(0.0, page_length(length, duration), duration)
@@ -1307,7 +1263,7 @@ clientside_callback(
         const plot = document.querySelector('#eeg .js-plotly-plot');
         if (!plot || !window.Plotly) { return window.dash_clientside.no_update; }
         const dark = document.documentElement.getAttribute('data-mantine-color-scheme') === 'dark';
-        const background = dark ? '#111A2E' : '#FFFFFF';
+        const background = dark ? '#101827' : '#FFFFFF';
         const layout = Object.assign({}, plot.layout, {paper_bgcolor: background, plot_bgcolor: background});
         const name = view ? `${view.recording}_${view.range[0].toFixed(0)}-${view.range[1].toFixed(0)}s` : 'eeg_view';
         window.Plotly.toImage({data: plot.data, layout: layout}, {format: 'png', scale: 3, width: plot.offsetWidth, height: plot.offsetHeight})
