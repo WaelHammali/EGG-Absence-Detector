@@ -64,8 +64,10 @@ PAGES = {
     "recording": "prediction", "overview": "comparison",
 }
 PAGE_LENGTHS = [("10 s", "10"), ("30 s", "30"), ("60 s", "60"), ("Full", "full")]
-# Server-side full-resolution figures, one per browser session.
-FIGURES: OrderedDict[str, object] = OrderedDict()
+# Server-side full-resolution figures, one per browser session, stored as (token, figure).
+# The token is also sent to the browser with the figure: a paging or zoom update is only
+# applied when both sides hold the same figure, otherwise the plot is rebuilt.
+FIGURES: OrderedDict[str, tuple[str, object]] = OrderedDict()
 MAX_SESSIONS = 8
 
 
@@ -343,7 +345,7 @@ def sidebar():
                         [
                             dmc.Text(swatch(REAL, "Real seizure (annotation), also drawn on the curves"), size="sm"),
                             dmc.Text(swatch(DETECTED, "Detection by the model"), size="sm"),
-                            dmc.Text(swatch(EVENT, "Technician event"), size="sm"),
+                            dmc.Text(swatch(EVENT, "Technician note"), size="sm"),
                             dmc.Text(swatch(THRESHOLD, "Threshold"), size="sm"),
                         ],
                         gap=4,
@@ -622,6 +624,7 @@ def layout():
             dcc.Store(id="model", data=DATA.default_model),
             dcc.Store(id="view"),
             dcc.Store(id="figure-meta"),
+            dcc.Store(id="rebuild"),
             dcc.Store(id="spectrum-point"),
             dcc.Store(id="keys-ready"),
             dcc.Download(id="download"),
@@ -1090,9 +1093,10 @@ def clamp(start: float, length: float, duration: float) -> list[float]:
     Output("eeg", "figure"), Output("figure-meta", "data"), Output("view", "data"),
     Input("recording", "value"), Input("channels", "value"), Input("mode", "value"), Input("gain", "value"),
     Input("events", "checked"), Input("reference", "checked"), Input("theme", "data"), Input("page", "value"), Input("model", "data"),
+    Input("rebuild", "data"),
     State("threshold", "value"), State("view", "data"), State("page-length", "value"), State("session", "data"),
 )
-def build_eeg(recording, channels, mode, gain, show_events, show_reference, theme, page, model, threshold, view, length, session):
+def build_eeg(recording, channels, mode, gain, show_events, show_reference, theme, page, model, _rebuild, threshold, view, length, session):
     if page == "comparison":
         # The EEG is hidden on this page; keep whatever is drawn.
         return no_update, no_update, no_update
@@ -1103,9 +1107,12 @@ def build_eeg(recording, channels, mode, gain, show_events, show_reference, them
     try:
         frame = app_data.signal(recording)
     except app_data.MissingData as error:
+        FIGURES.pop(session, None)
         return message_figure(str(error), theme, 420), None, no_update
     channels = [channel for channel in CHANNELS if channel in (channels or [])]
     if not channels:
+        # No curves on screen: forget the old figure so that paging cannot update a plot that is gone.
+        FIGURES.pop(session, None)
         return message_figure("Select at least one channel to display the EEG.", theme, 420), None, no_update
     duration = float(DATA.info(recording)["duration_s"])
     if view is None or view.get("recording") != recording:
@@ -1124,11 +1131,12 @@ def build_eeg(recording, channels, mode, gain, show_events, show_reference, them
         stacked=mode == "stacked", full_scale=app_data.amplitude_scale(recording), gain=0.5 * 2 ** gain,
         view=tuple(view_range), theme=theme, references=references,
     )
-    FIGURES[session] = figure
+    token = uuid.uuid4().hex
+    FIGURES[session] = (token, figure)
     FIGURES.move_to_end(session)
     while len(FIGURES) > MAX_SESSIONS:
         FIGURES.popitem(last=False)
-    description.update({"recording": recording, "channels": channels, "model": model})
+    description.update({"recording": recording, "channels": channels, "model": model, "token": token})
     return resampled_dict(figure, tuple(view_range)), description, {"recording": recording, "range": view_range}
 
 
@@ -1147,16 +1155,17 @@ def relayout_range(relayout: dict | None, duration: float) -> list[float] | None
 
 
 @app.callback(
-    Output("eeg", "figure", allow_duplicate=True), Output("view", "data", allow_duplicate=True),
+    Output("eeg", "figure", allow_duplicate=True), Output("view", "data", allow_duplicate=True), Output("rebuild", "data"),
     Input("prev-page", "n_clicks"), Input("next-page", "n_clicks"), Input("prev-seizure", "n_clicks"), Input("next-seizure", "n_clicks"),
     Input("page-length", "value"), Input("eeg", "relayoutData"),
-    State("view", "data"), State("session", "data"),
+    State("view", "data"), State("session", "data"), State("figure-meta", "data"),
     prevent_initial_call=True,
 )
-def navigate(_a, _b, _c, _d, length, relayout, view, session):
-    figure = FIGURES.get(session)
-    if view is None or figure is None:
-        return no_update, no_update
+def navigate(_a, _b, _c, _d, length, relayout, view, session, meta):
+    if view is None or not meta:
+        # Nothing to move: no patient view yet, or a message is shown instead of the curves.
+        return no_update, no_update, no_update
+    token, figure = FIGURES.get(session, (None, None))
     recording = view["recording"]
     duration = float(DATA.info(recording)["duration_s"])
     start, end = view["range"]
@@ -1165,10 +1174,10 @@ def navigate(_a, _b, _c, _d, length, relayout, view, session):
     if trigger == "eeg":
         target = relayout_range(relayout, duration)
         if target is None:
-            return no_update, no_update
+            return no_update, no_update, no_update
         target = [max(0.0, target[0]), min(duration, target[1])]
         if target[1] - target[0] < 0.05:
-            return no_update, no_update
+            return no_update, no_update, no_update
     elif trigger == "page-length":
         target = clamp(start, page_length(length, duration), duration)
     elif trigger in ("prev-page", "next-page"):
@@ -1179,10 +1188,15 @@ def navigate(_a, _b, _c, _d, length, relayout, view, session):
         centers = ((real["start_s"] + real["end_s"]) / 2).to_numpy()
         candidates = centers[centers > middle + 0.5] if trigger == "next-seizure" else centers[centers < middle - 0.5][::-1]
         if not len(candidates):
-            return no_update, no_update
+            return no_update, no_update, no_update
         # A full-recording view cannot be centered: fall back to a 30 s page.
         width = span if span < duration else min(30.0, duration)
         target = clamp(float(candidates[0]) - width / 2, width, duration)
+    new_view = {"recording": recording, "range": [round(target[0], 3), round(target[1], 3)]}
+    if figure is None or token != meta.get("token"):
+        # The server no longer holds the figure shown in the browser (app restarted, or the plot is
+        # being rebuilt): redraw it at the requested position instead of patching the wrong plot.
+        return no_update, new_view, uuid.uuid4().hex
     patch = figure.construct_update_data_patch(view_relayout(tuple(target)))
     if patch is no_update:
         patch = Patch()
@@ -1195,7 +1209,7 @@ def navigate(_a, _b, _c, _d, length, relayout, view, session):
         for axis in ("xaxis", "xaxis2"):
             patch["layout"][axis]["range"] = target
             patch["layout"][axis]["autorange"] = False
-    return patch, {"recording": recording, "range": [round(target[0], 3), round(target[1], 3)]}
+    return patch, new_view, no_update
 
 
 @app.callback(Output("view-label", "children"), Input("view", "data"))
