@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EEG Absence Detector — redesign mock-up</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Static mock-up: synthetic signals, illustrative numbers. Style A = calm clinical, Style B = dark console. */
+:root, [data-style="a"] {
+  --bg: #F5F7FA; --surface: #FFFFFF; --surface-2: #F9FAFB; --border: #E4E8EE; --border-strong: #CFD6DF;
+  --text: #0F172A; --text-2: #475569; --text-3: #8492A6;
+  --accent: #0B7285; --accent-soft: #E6F4F6; --accent-text: #0B5F6E;
+  --real: #12A36F; --real-soft: rgba(18,163,111,.12); --detected: #E5484D; --detected-soft: rgba(229,72,77,.10);
+  --note: #D97706; --threshold: #7C5CFC; --grid: rgba(15,23,42,.06); --trace-mute: #94A3B8;
+  --frontal: #0D9488; --central: #2563EB; --temporal: #DB2777; --posterior: #0284C7;
+  --dt: #B7791F; --rf: #2A78D6; --knn: #D55181; --svm: #D95926;
+  --shadow: 0 1px 2px rgba(15,23,42,.04), 0 1px 1px rgba(15,23,42,.03); --radius: 10px; --track: #EEF1F5;
+}
+[data-style="b"] {
+  --bg: #0A0F1C; --surface: #101827; --surface-2: #0D1422; --border: rgba(148,163,184,.14); --border-strong: rgba(148,163,184,.26);
+  --text: #E6EAF2; --text-2: #A3AEC2; --text-3: #6B7890;
+  --accent: #4FD1C5; --accent-soft: rgba(79,209,197,.12); --accent-text: #7FE3DA;
+  --real: #34D399; --real-soft: rgba(52,211,153,.16); --detected: #F87171; --detected-soft: rgba(248,113,113,.13);
+  --note: #FBBF24; --threshold: #A78BFA; --grid: rgba(148,163,184,.10); --trace-mute: #64748B;
+  --frontal: #4FD1C5; --central: #60A5FA; --temporal: #F472B6; --posterior: #38BDF8;
+  --dt: #C98500; --rf: #3987E5; --knn: #D55181; --svm: #E0703C;
+  --shadow: 0 1px 2px rgba(0,0,0,.4); --radius: 10px; --track: rgba(148,163,184,.10);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+.mono { font-family: "JetBrains Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+.app { width: 1920px; height: 1080px; display: grid; grid-template-rows: 52px 1fr; overflow: hidden; }
+.page-comparison .app { height: auto; min-height: 1080px; }
+
+/* header */
+header { display: flex; align-items: center; gap: 24px; padding: 0 20px; background: var(--surface); border-bottom: 1px solid var(--border); }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 15px; letter-spacing: -.01em; }
+.logo { width: 26px; height: 26px; border-radius: 7px; background: var(--accent); display: grid; place-items: center; }
+.logo svg { stroke: var(--surface); }
+nav { display: flex; gap: 4px; height: 100%; }
+nav a { display: flex; align-items: center; padding: 0 12px; color: var(--text-2); font-weight: 500; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+nav a.on { color: var(--text); border-bottom-color: var(--accent); }
+.spacer { flex: 1; }
+.field-label { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }
+.seg { display: inline-flex; background: var(--track); border-radius: 8px; padding: 2px; }
+.seg span { white-space: nowrap; padding: 4px 9px; border-radius: 6px; font-size: 13px; font-weight: 500; color: var(--text-2); }
+.seg span.on { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+[data-style="b"] .seg span.on { background: rgba(148,163,184,.18); box-shadow: none; }
+.model { display: flex; align-items: center; gap: 10px; }
+.icon-btn { width: 32px; height: 32px; border: 1px solid var(--border); border-radius: 8px; display: grid; place-items: center; color: var(--text-2); }
+
+/* layout */
+.body { display: grid; grid-template-columns: 272px 1fr; min-height: 0; }
+aside { background: var(--surface); border-right: 1px solid var(--border); padding: 16px; display: flex; flex-direction: column; gap: 20px; overflow: hidden; }
+.group { display: flex; flex-direction: column; gap: 8px; }
+.select { display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--border-strong); border-radius: 8px; padding: 8px 10px; font-weight: 500; }
+.facts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; }
+.facts div span { display: block; font-size: 11px; color: var(--text-3); }
+.facts div b { font-weight: 500; font-size: 13px; }
+.row { display: flex; align-items: center; justify-content: space-between; }
+.link { color: var(--accent-text); font-size: 12px; font-weight: 500; }
+.region { display: grid; grid-template-columns: 62px 1fr; align-items: center; gap: 6px; }
+.region > span { font-size: 12px; color: var(--text-2); }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip { font: 500 11px "JetBrains Mono", monospace; padding: 3px 6px; border-radius: 6px; border: 1px solid var(--border-strong); color: var(--text-3); }
+.chip.on { border-color: transparent; color: var(--surface); }
+[data-style="b"] .chip.on { color: #06101C; }
+.slider { position: relative; height: 4px; background: var(--track); border-radius: 2px; margin: 10px 2px 4px; }
+.slider i { position: absolute; left: 0; top: 0; height: 4px; border-radius: 2px; background: var(--accent); }
+.slider b { position: absolute; top: -6px; width: 16px; height: 16px; border-radius: 50%; background: var(--surface); border: 2px solid var(--accent); margin-left: -8px; }
+.ticks { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-3); }
+.toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.sw { width: 30px; height: 17px; border-radius: 9px; background: var(--border-strong); position: relative; flex: none; }
+.sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%; background: var(--surface); }
+.sw.on { background: var(--accent); } .sw.on::after { left: 15px; }
+main { padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 0; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+
+/* prediction */
+.summary { display: flex; align-items: center; gap: 20px; padding: 12px 16px; }
+.verdict { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-weight: 600; font-size: 12px; background: var(--real-soft); color: var(--real); white-space: nowrap; }
+.verdict.mid { background: rgba(217,119,6,.13); color: var(--note); }
+.summary p { margin: 0; color: var(--text-2); } .summary p b { color: var(--text); font-weight: 600; }
+.stats { display: flex; gap: 24px; margin-left: auto; }
+.stat span { display: block; font-size: 11px; color: var(--text-3); white-space: nowrap; }
+.stat b { font: 600 15px "JetBrains Mono", monospace; }
+.divider { width: 1px; align-self: stretch; background: var(--border); }
+.plot-card { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.toolbar { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 1px solid var(--border-strong); border-radius: 7px; font-size: 13px; font-weight: 500; color: var(--text); background: var(--surface); }
+.btn.ghost { border-color: transparent; color: var(--text-2); }
+.kbd { font: 500 11px "JetBrains Mono", monospace; padding: 1px 5px; border: 1px solid var(--border-strong); border-radius: 4px; color: var(--text-3); }
+.legend { display: flex; gap: 16px; padding: 8px 14px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-2); }
+i.sq, i.ln { display: inline-block; vertical-align: middle; margin-right: 7px; }
+.sq { width: 10px; height: 10px; border-radius: 2px; } .ln { width: 16px; height: 0; border-top: 2px solid; } .dash { border-top-style: dashed; }
+svg text { font-family: "JetBrains Mono", monospace; }
+
+/* comparison */
+.h { font-size: 15px; font-weight: 600; letter-spacing: -.01em; } .sub { color: var(--text-2); font-size: 13px; }
+.selector { display: flex; align-items: center; gap: 12px; padding: 12px 16px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border: 1px solid var(--border-strong); border-radius: 6px; font-size: 12px; font-weight: 500; }
+.story { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); margin: 8px 0 -4px; display: flex; align-items: center; gap: 8px; }
+.story b { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--accent-soft); color: var(--accent-text); font-size: 11px; }
+.winner-row { display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr; gap: 12px; }
+.winner { padding: 18px 20px; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.runner { padding: 16px 18px; }
+.big { font: 600 44px/1 "JetBrains Mono", monospace; letter-spacing: -.02em; } .mid-n { font: 600 28px/1 "JetBrains Mono", monospace; }
+.tag { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-text); }
+.kv { display: grid; grid-template-columns: auto auto; gap: 2px 14px; font-size: 13px; color: var(--text-2); } .kv b { color: var(--text); font: 500 13px "JetBrains Mono", monospace; text-align: right; }
+.two { display: grid; grid-template-columns: 1fr 1fr 0.7fr; gap: 12px; } .pad { padding: 14px 16px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-3); padding: 8px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+td { padding: 9px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; } tr:last-child td { border-bottom: 0; }
+td.n, th.n { text-align: right; font-family: "JetBrains Mono", monospace; } td.best { font-weight: 700; color: var(--accent-text); }
+.bar { height: 22px; border-radius: 5px; overflow: hidden; display: flex; font: 500 11px "JetBrains Mono", monospace; }
+.bar span { display: grid; place-items: center; }
+</style>
+</head>
+<body>
+<div class="app" id="app"></div>
+<script>
+// ---------- helpers
+const q = new URLSearchParams(location.search);
+const style = q.get("style") || "a", page = q.get("page") || "prediction";
+document.documentElement.dataset.style = style;
+document.body.className = "page-" + page;
+const CH = ["Fp1","Fp2","F7","F3","Fz","F4","F8","T3","C3","Cz","C4","T4","T5","P3","Pz","P4","T6","O1","O2"];
+const REGION = c => c.startsWith("F") ? "frontal" : c.startsWith("C") ? "central" : c.startsWith("T") ? "temporal" : "posterior";
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+
+function eegSvg(W, H) {
+  // 19 stacked rows + marks strip + probability row + navigator; synthetic 3 Hz spike-wave between 12 s and 19 s of a 30 s page.
+  const L = 44, R = 12, marks = 20, prob = 96, nav = 34, gap = 14, axis = 18;
+  const rows = H - marks - prob - nav - gap * 2 - axis, rh = rows / CH.length, w = W - L - R;
+  const x = t => L + (t / 30) * w, s0 = 12, s1 = 19, d0 = 12.6, d1 = 19.8;
+  let o = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`;
+  for (let t = 0; t <= 30; t += 5) o += `<line x1="${x(t)}" x2="${x(t)}" y1="${marks}" y2="${marks + rows + gap + prob}" stroke="${css("--grid")}"/>`;
+  o += `<rect x="${x(s0)}" y="${marks}" width="${x(s1) - x(s0)}" height="${rows + gap + prob}" fill="${css("--real-soft")}"/>`;
+  o += `<rect x="${x(d0)}" y="${marks}" width="${x(d1) - x(d0)}" height="${rows + gap + prob}" fill="${css("--detected-soft")}" stroke="${css("--detected")}" stroke-dasharray="3 3" stroke-width="1"/>`;
+  o += `<text x="${L - 8}" y="14" text-anchor="end" font-size="10" fill="${css("--text-3")}">notes</text>`;
+  o += `<path d="M${x(s0) - 5} 6 l5 8 l5 -8 z" fill="${css("--real")}"/><text x="${x(s0) + 9}" y="14" font-size="10" fill="${css("--text-2")}">Seizure 2</text>`;
+  [6.5, 23.2].forEach(t => o += `<path d="M${x(t) - 4} 7 h8 l-4 7 z" fill="${css("--note")}"/>`);
+  CH.forEach((c, i) => {
+    const y0 = marks + rh * (i + .5), amp = rh * (c.startsWith("Fp") ? .35 : .78), col = css("--" + REGION(c));
+    let d = "", ds = "";
+    for (let k = 0; k <= 900; k++) {
+      const t = k / 30, inS = t >= s0 && t <= s1, ph = (t - s0) * 3 * 2 * Math.PI;
+      let v = (rnd() - .5) * .22 + Math.sin(t * 9 + i) * .06;
+      if (inS) { const env = Math.min(1, (t - s0) * 2, (s1 - t) * 2); v += env * (Math.sin(ph) * .55 + Math.max(0, Math.sin(ph + 1.1)) ** 6 * -.9); }
+      const p = `${k && !(inS && Math.abs(t - s0) < .02) ? "L" : "M"}${x(t).toFixed(1)} ${(y0 - v * amp).toFixed(1)}`;
+      d += p; if (inS) ds += (ds ? "L" : "M") + p.slice(1);
+    }
+    o += `<text x="${L - 8}" y="${y0 + 4}" text-anchor="end" font-size="11" font-weight="500" fill="${col}">${c}</text>`;
+    o += `<path d="${d}" fill="none" stroke="${col}" stroke-width="1" opacity=".9"/><path d="${ds}" fill="none" stroke="${css("--real")}" stroke-width="1.5"/>`;
+  });
+  const py = marks + rows + gap, ph = prob;
+  o += `<line x1="${L}" x2="${L + w}" y1="${py + ph}" y2="${py + ph}" stroke="${css("--border-strong")}"/>`;
+  o += `<text x="${L - 8}" y="${py + 8}" text-anchor="end" font-size="10" fill="${css("--text-3")}">1</text><text x="${L - 8}" y="${py + ph}" text-anchor="end" font-size="10" fill="${css("--text-3")}">0</text>`;
+  let pd = `M${x(0)} ${py + ph}`; for (let t = 0; t < 30; t++) { const inS = t >= 12 && t < 20; const v = inS ? .86 + (rnd() - .5) * .18 : rnd() * .1 + (t == 11 ? .3 : 0); pd += `L${x(t)} ${py + ph - v * ph}L${x(t + 1)} ${py + ph - v * ph}`; }
+  o += `<path d="${pd}L${x(30)} ${py + ph}Z" fill="${css("--track")}" stroke="${css("--text-2")}" stroke-width="1.2"/>`;
+  o += `<path d="M${x(0)} ${py + ph}L${x(s0)} ${py + ph}L${x(s0)} ${py + 3}L${x(s1)} ${py + 3}L${x(s1)} ${py + ph}L${x(30)} ${py + ph}" fill="none" stroke="${css("--real")}" stroke-width="1.6"/>`;
+  const ty = py + ph - .82 * ph; o += `<line x1="${L}" x2="${L + w}" y1="${ty}" y2="${ty}" stroke="${css("--threshold")}" stroke-width="1.4" stroke-dasharray="6 4"/>`;
+  o += `<rect x="${L + w - 104}" y="${ty - 17}" width="104" height="15" rx="3" fill="${css("--surface")}"/><text x="${L + w - 4}" y="${ty - 6}" text-anchor="end" font-size="10" fill="${css("--threshold")}">threshold 0.82</text>`;
+  for (let t = 0; t <= 30; t += 5) o += `<text x="${x(t)}" y="${py + ph + 14}" text-anchor="middle" font-size="10" fill="${css("--text-3")}">${240 + t} s</text>`;
+  const ny = py + ph + axis + gap - 4; o += `<rect x="${L}" y="${ny}" width="${w}" height="${nav - 6}" rx="4" fill="${css("--track")}"/>`;
+  [.2, .32, .46, .66, .74].forEach(f => o += `<rect x="${L + w * f}" y="${ny + 4}" width="5" height="${nav - 14}" rx="1" fill="${css("--real")}"/>`);
+  o += `<rect x="${L + w * .193}" y="${ny - 1}" width="${w * .026}" height="${nav - 4}" rx="3" fill="none" stroke="${css("--accent")}" stroke-width="2"/>`;
+  return o + "</svg>";
+}
+
+function curveSvg(W, H, kind) {
+  const L = 36, B = 22, w = W - L - 8, h = H - B - 8, X = v => L + v * w, Y = v => 8 + (1 - v) * h;
+  let o = `<svg width="${W}" height="${H}">`;
+  for (let v = 0; v <= 1; v += .25) o += `<line x1="${L}" x2="${L + w}" y1="${Y(v)}" y2="${Y(v)}" stroke="${css("--grid")}"/><text x="${L - 6}" y="${Y(v) + 3}" text-anchor="end" font-size="10" fill="${css("--text-3")}">${v}</text><text x="${X(v)}" y="${H - 6}" text-anchor="middle" font-size="10" fill="${css("--text-3")}">${v}</text>`;
+  const f = {
+    f1: { svm: t => .52 + .38 * Math.min(1, t * 2.4) - (t > .9 ? (t - .9) * 2 : 0), rf: t => .15 + .72 * Math.min(1, t * 1.55) - (t > .85 ? (t - .85) * 4 : 0), knn: t => t < .2 ? .22 : t < .4 ? .58 : t < .62 ? .75 : .83, dt: t => .29 },
+    pr: { svm: t => t < .75 ? .9 - t * .08 : .84 - (t - .75) * 3.2, rf: t => t < .72 ? .88 - t * .1 : .8 - (t - .72) * 2.8, knn: t => t < .6 ? .86 - t * .12 : .79 - (t - .6) * 1.9, dt: t => t > .58 ? .43 - (t - .58) * .95 : NaN },
+  }[kind], best = { f1: { svm: [.82, .894], rf: [.67, .867], knn: [.61, .828], dt: [.05, .29] }, pr: { svm: [.42, .89], rf: [.52, .84], knn: [.42, .85], dt: [.59, .43] } }[kind];
+  for (const m of ["dt", "knn", "rf", "svm"]) {
+    let d = ""; for (let t = .05; t <= 1; t += .01) { const v = Math.max(.02, Math.min(1, f[m](t))); if (!isNaN(v)) d += (d ? "L" : "M") + X(t).toFixed(1) + " " + Y(v).toFixed(1); }
+    o += `<path d="${d}" fill="none" stroke="${css("--" + m)}" stroke-width="2"/><circle cx="${X(best[m][0])}" cy="${Y(best[m][1])}" r="4.5" fill="${css("--" + m)}" stroke="${css("--surface")}" stroke-width="2"/>`;
+  }
+  return o + "</svg>";
+}
+const ico = { brain: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round"><path d="M3 12h4l2-6 4 12 2-6h6"/></svg>', sun: "☼", down: "▾" };
+const swatch = (m, dashed) => `<i class="ln ${dashed ? "dash" : ""}" style="border-color:var(--${m})"></i>`;
+
+// ---------- shared chrome
+const header = `
+<header>
+  <div class="brand"><span class="logo">${ico.brain}</span>EEG Absence Detector</div>
+  <nav><a>Visualisation</a><a class="${page == "prediction" ? "on" : ""}">Prediction</a><a class="${page == "comparison" ? "on" : ""}">Comparison</a></nav>
+  <div class="spacer"></div>
+  <div class="model"><span class="field-label">Model</span>
+    <div class="seg"><span>DT</span><span>RF</span><span>KNN</span><span class="on">SVM</span></div>
+    <div class="seg"><span class="on">Unbalanced</span><span>Balanced</span></div>
+  </div>
+  <div class="icon-btn">${ico.sun}</div>
+</header>`;
+const regions = [["Frontal", ["Fp1","Fp2","F7","F3","Fz","F4","F8"], "frontal"], ["Central", ["C3","Cz","C4"], "central"], ["Temporal", ["T3","T4","T5","T6"], "temporal"], ["Parietal", ["P3","Pz","P4"], "posterior"], ["Occipital", ["O1","O2"], "posterior"]];
+const sidebar = (prediction) => `
+<aside>
+  <div class="group"><span class="field-label">Patient</span>
+    <div class="select"><span class="mono">211104B_D</span><span style="color:var(--text-3)">${ico.down}</span></div>
+    <div class="facts"><div><span>Sex · age</span><b>Male · 9 y</b></div><div><span>Duration</span><b class="mono">20 min 10 s</b></div><div><span>Real seizures</span><b class="mono">5 (40 s)</b></div><div><span>Annotations</span><b>Official</b></div></div>
+  </div>
+  ${prediction ? `<div class="group"><div class="row"><span class="field-label">Threshold</span><span class="mono" style="color:var(--threshold);font-weight:600">0.82 <span class="link" style="margin-left:6px">reset</span></span></div>
+    <div class="slider"><i style="width:82%;background:var(--threshold)"></i><b style="left:82%;border-color:var(--threshold)"></b></div><div class="ticks mono"><span>0.05</span><span>0.50</span><span>0.99</span></div></div>` : ""}
+  <div class="group"><div class="row"><span class="field-label">Channels · 19 of 19</span><span class="link">Show all</span></div>
+    ${regions.map(([n, cs, r]) => `<div class="region"><span>${n}</span><div class="chips">${cs.map(c => `<span class="chip on" style="background:var(--${r})">${c}</span>`).join("")}</div></div>`).join("")}
+  </div>
+  <div class="group"><span class="field-label">View</span>
+    <div class="seg" style="align-self:stretch"><span class="on" style="flex:1;text-align:center">Stacked</span><span style="flex:1;text-align:center">Overlay</span></div>
+    <div style="font-size:13px;color:var(--text-2);margin-top:6px">Page length</div><div class="seg" style="align-self:stretch"><span class="" style="flex:1;text-align:center">10 s</span><span class="on" style="flex:1;text-align:center">30 s</span><span class="" style="flex:1;text-align:center">60 s</span><span class="" style="flex:1;text-align:center">Full</span></div>
+    <div class="row" style="margin-top:6px"><span style="font-size:13px;color:var(--text-2)">Gain</span><span class="mono" style="font-size:12px">×1</span></div>
+    <div class="slider"><i style="width:25%"></i><b style="left:25%"></b></div><div class="ticks mono"><span>×0.5</span><span>×1</span><span>×2</span><span>×4</span><span>×8</span></div>
+  </div>
+  <div class="group"><div class="toggle"><span class="sw on"></span>Technician notes</div><div class="toggle"><span class="sw"></span><span>Reference channels<br><span style="color:var(--text-3);font-size:12px">ECG · EMG · SLI — not used by the model</span></span></div></div>
+</aside>`;
+
+// ---------- pages
+function prediction() {
+  return `${header}<div class="body">${sidebar(true)}<main>
+    <div class="card summary">
+      <span class="verdict mid">◐ Partly correct</span>
+      <p><b>5 of 5</b> real seizures found, <b>0</b> missed, <b>1</b> false alarm on this patient.</p>
+      <div class="stats"><div class="divider"></div>
+        <div class="stat"><span>All 21 patients · event F1</span><b>0.89</b></div><div class="stat"><span>Recall</span><b>92%</b></div><div class="stat"><span>Precision</span><b>87%</b></div><div class="stat"><span>False alarms / h</span><b>1.8</b></div>
+      </div>
+    </div>
+    <div class="card plot-card">
+      <div class="toolbar">
+        <span class="btn">‹ Page</span><span class="btn">Page ›</span><span class="btn">⏮ Seizure</span><span class="btn">Seizure ⏭</span>
+        <span class="kbd">←</span><span class="kbd">→</span>
+        <span class="mono" style="margin-left:10px;color:var(--text-2)">241.0 s – 271.0 s</span>
+        <div class="spacer"></div><span class="btn ghost">Spectrum</span><span class="btn ghost">Intervals (6)</span><span class="btn">Save PNG</span><span class="btn">Download CSV</span>
+      </div>
+      <div id="plot" style="flex:1;min-height:0;padding:8px 6px 0"></div>
+      <div class="legend"><span><i class="sq" style="background:var(--real)"></i>Real seizure (annotation), also drawn on the curves</span><span><i class="sq" style="background:var(--detected)"></i>Detection by the model</span><span><i class="ln dash" style="border-color:var(--threshold)"></i>Threshold</span><span><i class="sq" style="background:var(--note)"></i>Technician note</span><span style="margin-left:auto;color:var(--text-3)">Drag to zoom · double-click to reset · click a curve for its spectrum</span></div>
+    </div></main></div>`;
+}
+function comparison() {
+  const row = (m, mode, thr, f1, rec, pre, found, miss, fa, fah, wf1, on, off, best = []) => `<tr><td>${swatch(m)}<b style="font-weight:600">${{ svm: "SVM", rf: "Random Forest", knn: "KNN", dt: "Decision Tree" }[m]}</b> <span style="color:var(--text-3)">· ${mode}</span></td>${[thr, f1, rec, pre, found, miss, fa, fah, wf1, on, off].map((v, i) => `<td class="n ${best.includes(i) ? "best" : ""}">${v}</td>`).join("")}</tr>`;
+  return `${header}<div class="body">${sidebar(false)}<main>
+    <div class="card selector"><span class="h">Compare</span>
+      <div class="seg"><span class="on">Same training mode</span><span>Same algorithm, both modes</span><span>All models</span><span>Custom</span></div>
+      <div class="seg"><span class="on">Unbalanced</span><span>Balanced</span></div>
+      <div class="spacer"></div>${["dt", "rf", "knn", "svm"].map(m => `<span class="pill">${swatch(m)}${m.toUpperCase()} · Unbalanced ×</span>`).join("")}
+    </div>
+    <div class="story"><b>1</b>Who wins</div>
+    <div class="winner-row">
+      <div class="card winner"><div class="row"><span class="h">${swatch("svm")}SVM · Unbalanced</span><span class="tag">Best event F1</span></div>
+        <div style="display:flex;align-items:flex-end;gap:28px;margin-top:14px"><div><div class="field-label">Event F1</div><div class="big">0.89</div></div>
+        <div class="kv"><span>Seizures found</span><b>86 of 93</b><span>False alarms</span><b>16 · 1.8 / h</b><span>Recall · precision</span><b>92% · 87%</b><span>Threshold</span><b>0.82</b></div></div>
+        <p class="sub" style="margin:14px 0 0">Finds as many seizures as the others with the fewest false alarms. Its lead over Random Forest is a few events.</p></div>
+      ${[["rf", "Random Forest", "0.87", "87 of 93", "26"], ["knn", "KNN", "0.83", "86 of 93", "37"], ["dt", "Decision Tree", "0.29", "91 of 93", "561"]].map(([m, n, f, fo, fa]) => `<div class="card runner"><div class="h">${swatch(m)}${n} <span style="color:var(--text-3);font-weight:500">· Unbalanced</span></div><div style="margin-top:12px"><div class="field-label">Event F1</div><div class="mid-n">${f}</div></div><div class="kv" style="margin-top:12px"><span>Found</span><b>${fo}</b><span>False alarms</span><b>${fa}</b></div></div>`).join("")}
+    </div>
+    <div class="story"><b>2</b>Why</div>
+    <div class="two">
+      <div class="card pad"><div class="row"><span class="h">Event F1 against the threshold</span><span class="sub">dot = best threshold</span></div><div id="c1"></div></div>
+      <div class="card pad"><div class="row"><span class="h">Precision–recall</span><span class="sub">per 2 s window</span></div><div id="c2"></div></div>
+      <div class="card pad"><span class="h">Training data</span><p class="sub" style="margin:2px 0 14px">average of the 5 training folds</p>
+        <div class="sub" style="margin-bottom:4px">Unbalanced · 25,135 windows</div><div class="bar"><span style="width:96%;background:var(--track);color:var(--text-2)">96% no seizure</span><span style="width:4%;background:var(--real)"></span></div>
+        <div class="sub" style="margin:14px 0 4px">Balanced · 1,990 windows</div><div class="bar"><span style="width:50%;background:var(--track);color:var(--text-2)">50%</span><span style="width:50%;background:var(--real);color:#fff">50% seizure</span></div>
+        <p class="sub" style="margin:16px 0 0">Tests always keep the real proportions.</p></div>
+    </div>
+    <div class="story"><b>3</b>Detail</div>
+    <div class="card"><div class="row pad" style="padding-bottom:6px"><span class="h">Ranking</span><span class="select" style="padding:5px 10px;font-size:13px;gap:10px">Sort by Event F1 <span style="color:var(--text-3)">${ico.down}</span></span></div>
+      <table><tr><th>Model</th>${["Threshold", "Event F1", "Recall", "Precision", "Found", "Missed", "False alarms", "FA / hour", "Window F1", "Onset (s)", "Offset (s)"].map(h => `<th class="n">${h}</th>`).join("")}</tr>
+      ${row("svm", "Unbalanced", "0.82", "0.894", "92%", "87%", 86, 7, 16, "1.8", "0.572", "+1.64", "−1.99", [1, 3, 6, 7])}${row("rf", "Unbalanced", "0.67", "0.867", "94%", "81%", 87, 6, 26, "3.0", "0.642", "+0.90", "−1.46", [8])}${row("knn", "Unbalanced", "0.61", "0.828", "92%", "75%", 86, 7, 37, "4.2", "0.562", "+1.21", "−2.08")}${row("dt", "Unbalanced", "0.05", "0.290", "98%", "17%", 91, 2, 561, "64.2", "0.497", "+0.43", "−0.09", [2, 4, 5, 9, 10])}</table></div>
+    <p class="sub" style="margin:0 2px">Below, unchanged in content: confusion matrices · timeline of the selected patient (real seizures + one row per model) · event F1 per patient.</p>
+  </main></div>`;
+}
+document.getElementById("app").innerHTML = page == "comparison" ? comparison() : prediction();
+if (page == "prediction") { const p = document.getElementById("plot"); p.innerHTML = eegSvg(p.clientWidth, p.clientHeight); }
+else { ["c1", "c2"].forEach((id, i) => { const e = document.getElementById(id); e.innerHTML = curveSvg(e.clientWidth, 250, i ? "pr" : "f1"); }); }
+</script>
+</body>
+</html>
