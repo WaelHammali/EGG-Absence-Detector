@@ -143,7 +143,7 @@ def part_card(page: str, icon_name: str, title: str, text: str):
             html.Div(icon(icon_name, 22), className="home-part-icon"),
             html.H3(title, className="home-part-title"),
             html.P(text, className="home-part-text"),
-            dmc.Button(f"Open {title}", id={"type": "go-page", "page": page, "place": "parts"}, variant="light", radius="md", size="sm", rightSection=icon("tabler:arrow-right", 14)),
+            dmc.Button(f"Open {title}", id=f"home-go-{page}", variant="light", radius="md", size="sm", rightSection=icon("tabler:arrow-right", 14)),
         ],
         className="home-part",
     )
@@ -176,7 +176,7 @@ def home_page(data):
                     ),
                     dmc.Group(
                         [
-                            dmc.Button("Open the app", id={"type": "go-page", "page": "visualisation", "place": "hero"}, radius="md", size="md", rightSection=icon("tabler:arrow-right", 16)),
+                            dmc.Button("Open the app", id="home-open", radius="md", size="md", rightSection=icon("tabler:arrow-right", 16)),
                             html.A(["How it works ", icon("tabler:arrow-down", 15)], href="#how", className="home-link"),
                         ],
                         gap="lg", mt=8,

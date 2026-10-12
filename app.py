@@ -6,6 +6,7 @@ Run with ``python app.py``. Only precomputed files are read; nothing is trained 
 from __future__ import annotations
 
 from collections import OrderedDict
+from functools import lru_cache
 from pathlib import Path
 from urllib.parse import parse_qs
 import sys
@@ -13,7 +14,7 @@ import traceback
 import uuid
 
 import dash
-from dash import ALL, Input, Output, Patch, State, clientside_callback, ctx, dcc, html, no_update
+from dash import Input, Output, Patch, State, clientside_callback, ctx, dcc, html, no_update
 from dash_iconify import DashIconify
 import dash_mantine_components as dmc
 import pandas as pd
@@ -637,12 +638,16 @@ def show_page(page):
     return hidden, {"display": "flex"}, shown, prediction, prediction, hidden, NAVBAR
 
 
-@app.callback(Output("page", "value", allow_duplicate=True), Input({"type": "go-page", "page": ALL, "place": ALL}, "n_clicks"), prevent_initial_call=True)
-def go_to_page(clicks):
+@app.callback(
+    Output("page", "value", allow_duplicate=True),
+    Input("home-open", "n_clicks"), Input("home-go-visualisation", "n_clicks"), Input("home-go-prediction", "n_clicks"), Input("home-go-comparison", "n_clicks"),
+    prevent_initial_call=True,
+)
+def go_to_page(*clicks):
     """Buttons of the Home page open one of the three parts."""
-    if not ctx.triggered_id or not any(clicks):
+    if not any(clicks):
         return no_update
-    return ctx.triggered_id["page"]
+    return "visualisation" if ctx.triggered_id == "home-open" else ctx.triggered_id.removeprefix("home-go-")
 
 
 @app.callback(Output("home-example", "children"), Input("theme", "data"))
@@ -751,6 +756,27 @@ def model_swatch(model: str, theme: str, width: int = 22):
     return html.Span(style={"display": "inline-block", "width": width, "borderTop": f"3px {line} {style['color']}", "verticalAlign": "middle", "marginRight": 8})
 
 
+def swatch_html(model: str, theme: str, width: int = 22) -> str:
+    """HTML twin of ``model_swatch`` for the tables built as one HTML block."""
+    style = model_style(model, theme)
+    line = {"dash": "dashed", "dot": "dotted"}.get(style["dash"], "solid")
+    return f'<span style="display:inline-block;width:{width}px;border-top:3px {line} {style["color"]};vertical-align:middle;margin-right:8px"></span>'
+
+
+def html_table(head: list[str], rows: list[list[tuple[str, str]]], min_width: int, max_height: int | None = None):
+    """A large table as one component.
+
+    Each cell is (inner HTML, class names). Dash is slow when an update adds many hundred
+    components, so the Comparison tables are sent as one HTML block instead of one component
+    per cell; their look comes from .data-table in assets/app.css.
+    """
+    header = "".join(f"<th{cls}>{cell}</th>" for cell, cls in ((cell, f' class="{css}"' if css else "") for cell, css in head))
+    body = "".join("<tr>" + "".join(f'<td class="{css}">{cell}</td>' for cell, css in row) + "</tr>" for row in rows)
+    markup = f'<table class="data-table" style="min-width:{min_width}px"><thead><tr>{header}</tr></thead><tbody>{body}</tbody></table>'
+    style = {"overflow": "auto", **({"maxHeight": max_height} if max_height else {})}
+    return dcc.Markdown(markup, dangerously_allow_html=True, className="data-table-wrap", style=style)
+
+
 def ranking_values(model: str) -> dict:
     entry = DATA.entry(model)
     best = entry["at_best_threshold"]
@@ -853,24 +879,13 @@ def comparison_summary(models, sort, theme):
     rows = []
     for rank, model in enumerate(ordered, 1):
         value = values[model]
-        cells = [dmc.TableTd(str(rank), className="mono"), dmc.TableTd(html.Span([model_swatch(model, theme), dmc.Text(DATA.label(model), fw=600, size="sm", span=True)]), style={"whiteSpace": "nowrap"}), dmc.TableTd(f"{value['threshold']:.2f}", className="mono")]
+        cells = [(str(rank), "mono"), (f'{swatch_html(model, theme)}<b>{DATA.label(model)}</b>', "nowrap"), (f"{value['threshold']:.2f}", "mono")]
         for key, (_, _, formatter) in RANKING.items():
             shown = value[{"onset_error": "onset_signed", "offset_error": "offset_signed"}.get(key, key)]
             is_best = best[key] is not None and not pd.isna(value[key]) and value[key] == best[key] and len(models) > 1
-            cells.append(
-                dmc.TableTd(
-                    "—" if pd.isna(shown) else formatter(shown), className="mono",
-                    style={"whiteSpace": "nowrap", **({"fontWeight": 700, "background": "var(--mantine-color-teal-light)"} if is_best else {})},
-                )
-            )
-        rows.append(dmc.TableTr(cells))
-    table = dmc.TableScrollContainer(
-        dmc.Table(
-            [dmc.TableThead(dmc.TableTr([dmc.TableTh(name, style={"whiteSpace": "nowrap", **({"textDecoration": "underline"} if name == RANKING[sort][0] else {})}) for name in head])), dmc.TableTbody(rows)],
-            highlightOnHover=True, verticalSpacing=8, horizontalSpacing=10, fz="sm",
-        ),
-        minWidth=1250, type="native",
-    )
+            cells.append(("—" if pd.isna(shown) else formatter(shown), "mono nowrap" + (" top" if is_best else "")))
+        rows.append(cells)
+    table = html_table([(name, "sorted" if name == RANKING[sort][0] else "") for name in head], rows, min_width=1250)
     return None, {"display": "block"}, cards, table
 
 
@@ -917,31 +932,22 @@ def comparison_patients(models, recording, theme):
     figure = patient_comparison_figure(recording, float(DATA.info(recording)["duration_s"]), DATA.real(recording), results, theme)
 
     table = DATA.per_recording.loc[DATA.per_recording["model"].isin(models)].set_index(["recording", "model"])
-    head = [dmc.TableTh("Patient"), dmc.TableTh("Real seizures")] + [
-        dmc.TableTh(html.Span([model_swatch(model, theme, 16), DATA.label(model, short=True)]), style={"whiteSpace": "nowrap"}) for model in models
-    ]
+    head = [("Patient", ""), ("Real seizures", "")] + [(f"{swatch_html(model, theme, 16)}{DATA.label(model, short=True)}", "") for model in models]
     rows = []
     for patient in DATA.recordings:
         scores = {model: table.loc[(patient, model)] for model in models}
         top = max(score.event_f1 for score in scores.values())
         cells = [
-            dmc.TableTd([dmc.Text(patient, className="mono", size="sm", span=True)] + ([dmc.Badge("Selected", size="xs", variant="light", color="teal", ml=6)] if patient == recording else [])),
-            dmc.TableTd(str(int(DATA.info(patient)["seizures"])), className="mono"),
+            (patient + ('<span class="selected-badge">Selected</span>' if patient == recording else ""), "mono nowrap"),
+            (str(int(DATA.info(patient)["seizures"])), "mono"),
         ]
         for model in models:
             score = scores[model]
             is_best = score.event_f1 == top and top > 0 and len(models) > 1
-            cells.append(
-                dmc.TableTd(
-                    [dmc.Text(f"{score.event_f1:.2f}", span=True, fw=700 if is_best else 400), dmc.Text(f"  {int(score.found)}/{int(score.found + score.missed)} · {int(score.false_alarms)}", span=True, c="dimmed", size="xs")],
-                    className="mono", style={"whiteSpace": "nowrap", **({"background": "var(--mantine-color-teal-light)"} if is_best else {})},
-                )
-            )
-        rows.append(dmc.TableTr(cells))
-    patients = dmc.TableScrollContainer(
-        dmc.Table([dmc.TableThead(dmc.TableTr(head)), dmc.TableTbody(rows)], highlightOnHover=True, verticalSpacing=6, horizontalSpacing=10, fz="sm", stickyHeader=True),
-        minWidth=260 + 150 * len(models), mah=560, type="native",
-    )
+            detail = f"{int(score.found)}/{int(score.found + score.missed)} · {int(score.false_alarms)}"
+            cells.append((f'<b>{score.event_f1:.2f}</b><small>{detail}</small>' if is_best else f'{score.event_f1:.2f}<small>{detail}</small>', "mono nowrap" + (" top" if is_best else "")))
+        rows.append(cells)
+    patients = html_table(head, rows, min_width=260 + 150 * len(models), max_height=560)
     return title, figure, patients
 
 
@@ -1048,12 +1054,18 @@ def recording_summary(recording, threshold, model, page):
     return facts, verdict(DATA.label(model), threshold, metrics), table, f"Intervals ({len(matches)})"
 
 
+@lru_cache(maxsize=256)
+def all_patients(model: str, threshold: float) -> dict:
+    """Event metrics of one model on all patients; the predictions never change while the app runs."""
+    return DATA.detect_everything(threshold, model)[2]
+
+
 @app.callback(Output("model-overview", "children"), Input("model", "data"), Input("threshold", "value"), Input("page", "value"))
 def model_overview(model, threshold, page):
     """How the active model does on all patients at the current threshold."""
     if page != "prediction":
         return None
-    _, _, metrics = DATA.detect_everything(threshold, model)
+    metrics = all_patients(model, round(float(threshold), 2))
     total = metrics["tp"] + metrics["fn"]
     facts = [
         ("Event F1", f" · all {len(DATA.recordings)} patients", f"{metrics['f1']:.2f}"),
@@ -1086,13 +1098,18 @@ def clamp(start: float, length: float, duration: float) -> list[float]:
     Input("recording", "value"), Input("channels", "value"), Input("mode", "value"), Input("gain", "value"),
     Input("events", "checked"), Input("reference", "checked"), Input("theme", "data"), Input("page", "value"), Input("model", "data"),
     Input("rebuild", "data"),
-    State("threshold", "value"), State("view", "data"), State("page-length", "value"), State("session", "data"),
+    State("threshold", "value"), State("view", "data"), State("page-length", "value"), State("session", "data"), State("figure-meta", "data"),
 )
-def build_eeg(recording, channels, mode, gain, show_events, show_reference, theme, page, model, _rebuild, threshold, view, length, session):
-    if page == "comparison":
-        # The EEG is hidden on this page; keep whatever is drawn.
+def build_eeg(recording, channels, mode, gain, show_events, show_reference, theme, page, model, _rebuild, threshold, view, length, session, meta):
+    if page in ("home", "comparison"):
+        # The EEG is hidden on these pages; keep whatever is drawn.
         return no_update, no_update, no_update
     prediction = page == "prediction"
+    # Coming back from Home or Comparison to the plot that is already drawn: nothing to redo.
+    # (Threshold changes reach the drawn plot through update_detections.)
+    key = [recording, sorted(channels or []), mode, gain, bool(show_events), bool(show_reference), theme, page, model if prediction else None]
+    if ctx.triggered_id == "page" and meta and meta.get("key") == key and session in FIGURES and FIGURES[session][0] == meta.get("token"):
+        return no_update, no_update, no_update
     if ctx.triggered_id == "model":
         # The slider is moving to this model's best threshold at the same time.
         threshold = DATA.best_threshold(model)
@@ -1128,7 +1145,7 @@ def build_eeg(recording, channels, mode, gain, show_events, show_reference, them
     FIGURES.move_to_end(session)
     while len(FIGURES) > MAX_SESSIONS:
         FIGURES.popitem(last=False)
-    description.update({"recording": recording, "channels": channels, "model": model, "token": token})
+    description.update({"recording": recording, "channels": channels, "model": model, "token": token, "key": key})
     return resampled_dict(figure, tuple(view_range)), description, {"recording": recording, "range": view_range}
 
 
