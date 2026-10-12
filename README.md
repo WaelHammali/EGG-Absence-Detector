@@ -87,7 +87,7 @@ python app.py
 
 Open <http://127.0.0.1:8050>. Nothing is trained at startup. If a precomputed file is missing, the app shows which command to run instead of failing.
 
-The app opens in a light theme; the moon/sun button in the header switches to the dark theme. It has three parts, chosen with the tabs in the header, and one patient selector in the sidebar (with the patient's sex, age, recording duration and number of real seizures).
+The app opens in a light theme; the moon/sun button in the header switches to the dark theme. It opens on a **Home** page: what the app is for, an example of a real seizure with the best model's detection, then, further down, the seven steps from raw EEG to detected seizures (recordings, filtering, windows, features, the training modes, testing on unseen patients, thresholds) with the numbers read from the data and the registry, the best model and buttons to the other parts. Then three parts, chosen with the tabs in the header, and one patient selector in the sidebar (with the patient's sex, age, recording duration and number of real seizures).
 
 - **Visualisation**: the data only. The 19 channels are toggle chips grouped by scalp region (click a channel to hide or show it; "Show all" brings them all back), stacked in 10-20 order or overlaid. Each curve turns green during a real seizure, a diamond marks each seizure start, and the bottom curve is "yes" during a seizure and "no" otherwise. The plot fills the window: on a 1920×1080 screen the 19 channels, the bottom row and the navigator are visible together without scrolling.
 - **Prediction**: the model chosen in the header (Algorithm: DT / RF / KNN / SVM, Training mode: Unbalanced / Balanced / Augmented). A summary line gives the verdict for this patient (found, missed, false alarms) and, on the right, the model's scores on all patients. The plot adds the model's probability, its detections and the threshold line. The threshold slider is in the sidebar; each model starts at its own best threshold and everything updates live.
@@ -106,7 +106,7 @@ The provisional counts and feature definition are documented in [`docs/DATASET_P
 - `src/labels.py`: sample-level binary labels.
 - `src/preprocessing.py`: band-pass filtering before segmentation.
 - `src/detection.py`: window probabilities → seizure intervals, event-level comparison with annotations.
-- `src/app_data.py`, `src/app_figures.py`, `assets/app.css`: data access, themed figures and styles for `app.py`.
+- `src/app_data.py`, `src/app_figures.py`, `src/app_home.py`, `assets/app.css`: data access, themed figures, the Home page and styles for `app.py`.
 - `src/annotations.py`: provisional/official annotation resolution driven by `config/annotation_decisions.yaml`.
 - `src/segmentation.py`: 2 s windows with 50% overlap.
 - `src/features.py`: per-channel and across-channel time/frequency features.

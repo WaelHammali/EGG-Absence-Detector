@@ -13,7 +13,7 @@ import traceback
 import uuid
 
 import dash
-from dash import Input, Output, Patch, State, clientside_callback, ctx, dcc, html, no_update
+from dash import ALL, Input, Output, Patch, State, clientside_callback, ctx, dcc, html, no_update
 from dash_iconify import DashIconify
 import dash_mantine_components as dmc
 import pandas as pd
@@ -26,6 +26,7 @@ from src.app_figures import (
     confusion_figure, curves_figure, event_shapes, message_figure, model_style,
     patient_comparison_figure, recording_figure, resampled_dict, spectrum_figure, training_distribution_figure, view_relayout,
 )
+from src.app_home import example_figure, home_page
 from src.io import CHANNELS
 
 
@@ -60,9 +61,10 @@ RANKING = {
     "fit_seconds": ("Training (s/fold)", False, lambda value: f"{value:.2f}"),
 }
 PAGES = {
-    "visualisation": "visualisation", "prediction": "prediction", "comparison": "comparison",
+    "home": "home", "visualisation": "visualisation", "prediction": "prediction", "comparison": "comparison",
     "recording": "prediction", "overview": "comparison",
 }
+NAVBAR = {"width": 272, "breakpoint": "sm"}
 PAGE_LENGTHS = [("10 s", "10"), ("30 s", "30"), ("60 s", "60"), ("Full", "full")]
 # Server-side full-resolution figures, one per browser session, stored as (token, figure).
 # The token is also sent to the browser with the figure: a paging or zoom update is only
@@ -161,8 +163,9 @@ def header():
             [
                 html.Div([html.Span(icon("tabler:activity-heartbeat", 16), className="brand-mark"), "EEG Absence Detector"], className="brand"),
                 dmc.SegmentedControl(
-                    id="page", value="visualisation", className="page-tabs", withItemsBorders=False, transitionDuration=0,
+                    id="page", value="home", className="page-tabs", withItemsBorders=False, transitionDuration=0,
                     data=[
+                        {"value": "home", "label": "Home"},
                         {"value": "visualisation", "label": "Visualisation"},
                         {"value": "prediction", "label": "Prediction"},
                         {"value": "comparison", "label": "Comparison"},
@@ -567,12 +570,13 @@ def layout():
                     dmc.AppShellMain(
                         [
                             dmc.Alert(id="error", title="Something went wrong", color="red", icon=icon("tabler:alert-circle"), hide=True, withCloseButton=True, mb="md"),
+                            home_page(DATA),
                             comparison_page(),
                             recording_page(),
                         ]
                     ),
                 ],
-                header={"height": 52}, navbar={"width": 272, "breakpoint": "sm"}, padding={"base": 12, "lg": 16},
+                id="shell", header={"height": 52}, navbar=NAVBAR | {"collapsed": {"desktop": True, "mobile": True}}, padding={"base": 12, "lg": 16},
             ),
         ],
         id="provider", forceColorScheme="light", theme=theme,
@@ -618,15 +622,47 @@ def apply_theme(theme):
 @app.callback(
     Output("page-overview", "style"), Output("page-recording", "style"),
     Output("recording-controls", "style"), Output("prediction-controls", "style"), Output("model-controls", "style"),
+    Output("page-home", "style"), Output("shell", "navbar"),
     Input("page", "value"),
 )
 def show_page(page):
     shown, hidden = {"display": "block"}, {"display": "none"}
+    if page == "home":
+        # The introduction uses the full width: no sidebar, no model controls.
+        return hidden, hidden, hidden, hidden, hidden, shown, NAVBAR | {"collapsed": {"desktop": True, "mobile": True}}
     if page == "comparison":
         # No model to choose here: they are always shown together.
-        return shown, hidden, hidden, hidden, hidden
+        return shown, hidden, hidden, hidden, hidden, hidden, NAVBAR
     prediction = shown if page == "prediction" else hidden
-    return hidden, {"display": "flex"}, shown, prediction, prediction
+    return hidden, {"display": "flex"}, shown, prediction, prediction, hidden, NAVBAR
+
+
+@app.callback(Output("page", "value", allow_duplicate=True), Input({"type": "go-page", "page": ALL, "place": ALL}, "n_clicks"), prevent_initial_call=True)
+def go_to_page(clicks):
+    """Buttons of the Home page open one of the three parts."""
+    if not ctx.triggered_id or not any(clicks):
+        return no_update
+    return ctx.triggered_id["page"]
+
+
+@app.callback(Output("home-example", "children"), Input("theme", "data"))
+def home_example(theme):
+    return dcc.Graph(figure=example_figure(DATA, theme), config={"displayModeBar": False, "staticPlot": True}, style={"height": 300})
+
+
+# A page change moves the top of the window back to the header, and resizes the plots that
+# were drawn while their page was hidden or while the sidebar was closed.
+clientside_callback(
+    """
+    function(page) {
+        window.scrollTo(0, 0);
+        setTimeout(function() { window.dispatchEvent(new Event('resize')); }, 120);
+        setTimeout(function() { window.dispatchEvent(new Event('resize')); }, 400);
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output("page", "className"), Input("page", "value"),
+)
 
 
 @app.callback(Output("model", "data"), Output("active-model", "children"), Input("algo", "value"), Input("train-mode", "value"))
