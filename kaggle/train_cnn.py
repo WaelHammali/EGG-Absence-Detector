@@ -1,0 +1,394 @@
+"""Train compact CNNs to detect absence seizures from the cleaned EEG (Kaggle, GPU).
+
+Self-contained: needs only numpy, pandas, pyarrow, scikit-learn and PyTorch (all preinstalled
+on Kaggle). Input: the private dataset written by scripts/export_kaggle.py.
+
+Method (research report, part A8):
+- Input: 4 s of the 19 filtered channels (1,024 samples) centred on each 2 s window of the
+  official dataset, so the label is exactly the official one (at least 50 % of the central
+  2 s is seizure) and the predictions line up with the 12 classical models.
+- Normalization per recording and channel: (x - median) / (1.4826 · MAD), clipped at ±20.
+- Same 5 outer folds as the classical models. In each outer fold, 3 training recordings
+  (with seizures) are held out for early stopping and for choosing the threshold.
+- Real class proportions, weighted cross-entropy (seizure weight 8), AdamW + cosine schedule,
+  early stopping on validation average precision.
+- Optional online augmentation of BOTH classes: amplitude scaling, small noise, channel
+  dropout, left-right mirror, small time shift (the seizure share stays at about 4 %).
+- Several seeds per fold; probabilities averaged.
+
+Outputs in /kaggle/working/cnn_outputs/ (or --out):
+- predictions/<name>.parquet: out-of-fold probability of every window (same format as
+  outputs/predictions/*.parquet of the project);
+- predictions/<name>_validation.parquet: probabilities of the held-out training recordings,
+  used to choose each fold's threshold without looking at the test fold;
+- models/<name>_fold<k>_seed<s>.pt, and models/<name>_final.pt (+ .onnx when possible): weights;
+- <name>_config.json and <name>_history.json.
+
+Usage on Kaggle (Notebook → Settings: Accelerator GPU T4 or P100; add the dataset as input):
+    !python train_cnn.py --arch shallow
+    !python train_cnn.py --arch shallow --augment
+    !python train_cnn.py --arch eegnet --augment
+Quick check (CPU, minutes): python train_cnn.py --data <folder> --quick
+"""
+
+from __future__ import annotations
+
+import argparse
+import copy
+import json
+import os
+from pathlib import Path
+import time
+
+import numpy as np
+import pandas as pd
+from sklearn.metrics import average_precision_score
+import torch
+from torch import nn
+
+
+FS = 256
+CHANNELS = ["Fp1", "Fp2", "F7", "F3", "Fz", "F4", "F8", "T3", "C3", "Cz", "C4", "T4", "T5", "P3", "Pz", "P4", "T6", "O1", "O2"]
+MIRROR = {"Fp1": "Fp2", "F7": "F8", "F3": "F4", "T3": "T4", "C3": "C4", "T5": "T6", "P3": "P4", "O1": "O2"}
+MIRROR.update({right: left for left, right in MIRROR.items()})
+MIRROR_INDEX = [CHANNELS.index(MIRROR.get(channel, channel)) for channel in CHANNELS]
+# Same post-processing as the project (src/detection.py).
+MIN_GAP_S = 2.0
+MIN_DURATION_S = 2.0
+THRESHOLDS = np.round(np.arange(0.05, 0.995, 0.01), 2)
+
+
+# ----------------------------------------------------------------------------- arguments
+
+
+def arguments(argv=None):
+    parser = argparse.ArgumentParser(description="Train compact CNNs for absence-seizure detection.")
+    parser.add_argument("--data", help="Folder with windows.csv and signals/ (default: found under /kaggle/input)")
+    parser.add_argument("--out", default="/kaggle/working/cnn_outputs" if Path("/kaggle/working").exists() else "cnn_outputs")
+    parser.add_argument("--arch", choices=["shallow", "eegnet"], default="shallow")
+    parser.add_argument("--augment", action="store_true", help="Online augmentation of both classes")
+    parser.add_argument("--window-s", type=float, default=4.0, help="Input length in seconds, centred on each 2 s window")
+    parser.add_argument("--epochs", type=int, default=40)
+    parser.add_argument("--patience", type=int, default=8)
+    parser.add_argument("--batch", type=int, default=128)
+    parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--weight-decay", type=float, default=1e-2)
+    parser.add_argument("--seizure-weight", type=float, default=8.0)
+    parser.add_argument("--seeds", type=int, default=3)
+    parser.add_argument("--validation-recordings", type=int, default=3)
+    parser.add_argument("--folds", type=int, nargs="*", help="Outer folds to run (default: all)")
+    parser.add_argument("--no-final", action="store_true", help="Skip the final model trained on all recordings")
+    parser.add_argument("--quick", action="store_true", help="Tiny run to check that everything works")
+    # parse_known_args: also works when run inside a notebook cell.
+    args, _ = parser.parse_known_args(argv)
+    if args.quick:
+        args.epochs, args.patience, args.seeds, args.folds = 2, 2, 1, [1]
+    return args
+
+
+def find_data(path: str | None) -> Path:
+    if path:
+        return Path(path)
+    for candidate in Path("/kaggle/input").rglob("windows.csv"):
+        return candidate.parent
+    raise FileNotFoundError("windows.csv not found: add the dataset to the notebook or pass --data")
+
+
+# ----------------------------------------------------------------------------- data
+
+
+def load(data: Path, window_samples: int, quick: bool):
+    """All input windows as one float32 array (windows, channels, samples), plus the window table."""
+    windows = pd.read_csv(data / "windows.csv")
+    annotations = pd.read_csv(data / "annotations.csv")
+    if quick:
+        keep = windows.loc[windows["fold"] == 1, "recording"].unique().tolist() + windows.loc[windows["fold"] == 2, "recording"].unique().tolist()[:3]
+        windows = windows.loc[windows["recording"].isin(keep)].reset_index(drop=True)
+    X = np.zeros((len(windows), len(CHANNELS), window_samples), dtype=np.float32)
+    half = (window_samples - 2 * FS) // 2  # context added on each side of the 2 s window
+    for recording, rows in windows.groupby("recording").groups.items():
+        signal = pd.read_parquet(data / f"signals/{recording}.parquet", columns=CHANNELS).to_numpy(np.float32).T
+        median = np.median(signal, axis=1, keepdims=True)
+        mad = np.median(np.abs(signal - median), axis=1, keepdims=True) * 1.4826
+        signal = np.clip((signal - median) / np.maximum(mad, 1e-6), -20, 20)
+        padded = np.pad(signal, ((0, 0), (half, half + window_samples)))
+        for row in rows:
+            start = int(round(windows.at[row, "start_s"] * FS))  # in the padded signal, start - half + half
+            X[row] = padded[:, start : start + window_samples]
+    return X, windows, annotations
+
+
+# ----------------------------------------------------------------------------- models
+
+
+class ShallowConvNet(nn.Module):
+    """Schirrmeister et al. 2017: temporal conv → spatial conv → square → mean pool → log."""
+
+    def __init__(self, n_chans: int, n_times: int, n_classes: int = 2, filters: int = 40, dropout: float = 0.5):
+        super().__init__()
+        self.features = nn.Sequential(
+            nn.Conv2d(1, filters, (1, 25)),
+            nn.Conv2d(filters, filters, (n_chans, 1), bias=False),
+            nn.BatchNorm2d(filters),
+        )
+        self.pool = nn.AvgPool2d((1, 75), stride=(1, 15))
+        self.dropout = nn.Dropout(dropout)
+        with torch.no_grad():
+            size = self._embed(torch.zeros(1, n_chans, n_times)).shape[1]
+        self.classifier = nn.Linear(size, n_classes)
+
+    def _embed(self, x):
+        x = self.features(x.unsqueeze(1))
+        x = torch.log(torch.clamp(self.pool(x * x), min=1e-6))
+        return x.flatten(1)
+
+    def forward(self, x):
+        return self.classifier(self.dropout(self._embed(x)))
+
+
+class EEGNet(nn.Module):
+    """Lawhern et al. 2018 (EEGNet-8,2), temporal kernel of half a second at 256 Hz."""
+
+    def __init__(self, n_chans: int, n_times: int, n_classes: int = 2, f1: int = 8, depth: int = 2, f2: int = 16, kernel: int = 128, dropout: float = 0.5):
+        super().__init__()
+        self.block = nn.Sequential(
+            nn.Conv2d(1, f1, (1, kernel), padding=(0, kernel // 2), bias=False),
+            nn.BatchNorm2d(f1),
+            nn.Conv2d(f1, f1 * depth, (n_chans, 1), groups=f1, bias=False),
+            nn.BatchNorm2d(f1 * depth),
+            nn.ELU(),
+            nn.AvgPool2d((1, 4)),
+            nn.Dropout(dropout),
+            nn.Conv2d(f1 * depth, f1 * depth, (1, 16), padding=(0, 8), groups=f1 * depth, bias=False),
+            nn.Conv2d(f1 * depth, f2, 1, bias=False),
+            nn.BatchNorm2d(f2),
+            nn.ELU(),
+            nn.AvgPool2d((1, 8)),
+            nn.Dropout(dropout),
+        )
+        with torch.no_grad():
+            size = self.block(torch.zeros(1, 1, n_chans, n_times)).flatten(1).shape[1]
+        self.classifier = nn.Linear(size, n_classes)
+
+    def forward(self, x):
+        return self.classifier(self.block(x.unsqueeze(1)).flatten(1))
+
+
+def build(arch: str, n_times: int) -> nn.Module:
+    return (ShallowConvNet if arch == "shallow" else EEGNet)(len(CHANNELS), n_times)
+
+
+# ----------------------------------------------------------------------------- augmentation
+
+
+def augment(x: torch.Tensor) -> torch.Tensor:
+    """Applied on the GPU to a training batch (both classes alike)."""
+    batch = x.shape[0]
+    device = x.device
+    x = x * torch.empty(batch, 1, 1, device=device).uniform_(0.6, 1.6)  # amplitude scaling
+    x = x + 0.03 * torch.randn_like(x)  # small noise (the signal is in MAD units)
+    drop = torch.rand(batch, device=device) < 0.3  # channel dropout: 1 to 3 channels
+    if drop.any():
+        count = torch.randint(1, 4, (batch,), device=device)
+        ranks = torch.rand(batch, x.shape[1], device=device).argsort(dim=1).argsort(dim=1)
+        mask = (ranks < count[:, None]) & drop[:, None]
+        x = x.masked_fill(mask[:, :, None], 0.0)
+    flip = torch.rand(batch, device=device) < 0.5  # left-right mirror
+    if flip.any():
+        x[flip] = x[flip][:, MIRROR_INDEX]
+    shift = int(torch.randint(-32, 33, (1,)).item())  # up to 0.125 s, same for the batch
+    return torch.roll(x, shifts=shift, dims=2) if shift else x
+
+
+# ----------------------------------------------------------------------------- detection (same rules as src/detection.py)
+
+
+def intervals(start: np.ndarray, end: np.ndarray, positive: np.ndarray) -> list[list[float]]:
+    order = np.argsort(start)
+    start, end, positive = start[order], end[order], positive[order]
+    events: list[list[float]] = []
+    for s, e, p in zip(start, end, positive):
+        if not p:
+            continue
+        if events and s - events[-1][1] < MIN_GAP_S:
+            events[-1][1] = max(events[-1][1], e)
+        else:
+            events.append([s, e])
+    return [event for event in events if event[1] - event[0] >= MIN_DURATION_S]
+
+
+def event_counts(table: pd.DataFrame, annotations: pd.DataFrame, threshold) -> dict:
+    """Found / missed seizures and false alarms; ``threshold`` is a number or a per-row array."""
+    positive = table["proba"].to_numpy() >= threshold
+    tp = fn = fp = detections = 0
+    for recording, rows in table.groupby("recording").groups.items():
+        rows = np.asarray(rows)
+        detected = intervals(table["start_s"].to_numpy()[rows], table["end_s"].to_numpy()[rows], positive[rows])
+        real = annotations.loc[annotations["recording"] == recording, ["start_s", "end_s"]].to_numpy()
+        used = np.zeros(len(detected), dtype=bool)
+        for s, e in real:
+            hit = np.array([d[0] < e and d[1] > s for d in detected], dtype=bool)
+            if len(detected):
+                used |= hit
+            if hit.any():
+                tp += 1
+            else:
+                fn += 1
+        fp += int((~used).sum())
+        detections += len(detected)
+    precision = (detections - fp) / detections if detections else 0.0
+    recall = tp / (tp + fn) if tp + fn else 0.0
+    f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
+    return {"f1": f1, "found": tp, "missed": fn, "false_alarms": fp, "precision": precision, "recall": recall}
+
+
+def best_threshold(table: pd.DataFrame, annotations: pd.DataFrame) -> float:
+    scores = [event_counts(table, annotations, threshold)["f1"] for threshold in THRESHOLDS]
+    return float(THRESHOLDS[int(np.argmax(scores))])  # first maximum = lowest threshold
+
+
+# ----------------------------------------------------------------------------- training
+
+
+def predict(model: nn.Module, X: np.ndarray, rows: np.ndarray, device, batch: int = 512) -> np.ndarray:
+    model.eval()
+    out = []
+    with torch.no_grad(), torch.autocast(device.type, enabled=device.type == "cuda"):
+        for first in range(0, len(rows), batch):
+            xb = torch.from_numpy(X[rows[first : first + batch]]).to(device, non_blocking=True)
+            out.append(torch.softmax(model(xb).float(), dim=1)[:, 1].cpu().numpy())
+    return np.concatenate(out) if out else np.zeros(0)
+
+
+def train(args, X, y, train_rows, valid_rows, seed: int, device, fixed_epochs: int | None = None):
+    """Train one model; early stopping on validation average precision unless ``fixed_epochs``."""
+    torch.manual_seed(seed)
+    rng = np.random.default_rng(seed)
+    model = build(args.arch, X.shape[2]).to(device)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    epochs = fixed_epochs or args.epochs
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
+    loss_fn = nn.CrossEntropyLoss(weight=torch.tensor([1.0, args.seizure_weight], device=device))
+    scaler = torch.amp.GradScaler(enabled=device.type == "cuda")
+    best = {"score": -1.0, "epoch": 0, "state": None}
+    history = []
+    for epoch in range(1, epochs + 1):
+        model.train()
+        order = rng.permutation(train_rows)
+        total = 0.0
+        for first in range(0, len(order), args.batch):
+            rows = np.sort(order[first : first + args.batch])
+            xb = torch.from_numpy(X[rows]).to(device, non_blocking=True)
+            yb = torch.from_numpy(y[rows]).to(device, non_blocking=True)
+            if args.augment:
+                xb = augment(xb)
+            optimizer.zero_grad(set_to_none=True)
+            with torch.autocast(device.type, enabled=device.type == "cuda"):
+                loss = loss_fn(model(xb), yb)
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+            total += float(loss) * len(rows)
+        scheduler.step()
+        record = {"epoch": epoch, "loss": total / len(order)}
+        if fixed_epochs is None:
+            score = average_precision_score(y[valid_rows], predict(model, X, valid_rows, device))
+            record["validation_ap"] = float(score)
+            if score > best["score"]:
+                best = {"score": float(score), "epoch": epoch, "state": copy.deepcopy(model.state_dict())}
+            elif epoch - best["epoch"] >= args.patience:
+                history.append(record)
+                break
+        history.append(record)
+    if fixed_epochs is None:
+        model.load_state_dict(best["state"])
+    return model, best["epoch"] if fixed_epochs is None else epochs, history
+
+
+def main(argv=None) -> None:
+    args = arguments(argv)
+    data = find_data(args.data)
+    out = Path(args.out)
+    (out / "predictions").mkdir(parents=True, exist_ok=True)
+    (out / "models").mkdir(parents=True, exist_ok=True)
+    name = f"cnn_{args.arch}_{'augmented' if args.augment else 'plain'}"
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    torch.set_num_threads(max(1, os.cpu_count() or 1))
+    window_samples = int(round(args.window_s * FS))
+    started = time.time()
+    X, windows, annotations = load(data, window_samples, args.quick)
+    y = windows["true_class"].to_numpy(np.int64)
+    print(f"{name} on {device}: {len(windows):,} windows ({y.sum():,} seizure), input {X.shape[1:]} , {time.time() - started:.0f} s to load", flush=True)
+
+    folds = args.folds or sorted(windows["fold"].unique())
+    proba = np.full(len(windows), np.nan)
+    validation_tables, history, thresholds, best_epochs = [], {}, {}, []
+    for fold in folds:
+        test_rows = np.flatnonzero(windows["fold"].to_numpy() == fold)
+        train_side = windows.loc[windows["fold"] != fold]
+        with_seizures = sorted(train_side.loc[train_side["true_class"] == 1, "recording"].unique())
+        chosen = np.random.default_rng(fold).choice(with_seizures, size=min(args.validation_recordings, len(with_seizures) - 1), replace=False)
+        valid_rows = np.flatnonzero(windows["recording"].isin(chosen).to_numpy())
+        train_rows = np.flatnonzero(((windows["fold"] != fold) & ~windows["recording"].isin(chosen)).to_numpy())
+        fold_test, fold_valid = [], []
+        for seed in range(args.seeds):
+            model, epoch, log = train(args, X, y, train_rows, valid_rows, seed=100 * fold + seed, device=device)
+            best_epochs.append(epoch)
+            history[f"fold{fold}_seed{seed}"] = log
+            fold_test.append(predict(model, X, test_rows, device))
+            fold_valid.append(predict(model, X, valid_rows, device))
+            torch.save(model.state_dict(), out / "models" / f"{name}_fold{fold}_seed{seed}.pt")
+            print(f"  fold {fold} seed {seed}: best epoch {epoch}, validation AP {max(r.get('validation_ap', 0) for r in log):.3f}, "
+                  f"{time.time() - started:.0f} s", flush=True)
+        proba[test_rows] = np.mean(fold_test, axis=0)
+        valid = windows.iloc[valid_rows].assign(proba=np.mean(fold_valid, axis=0))
+        thresholds[int(fold)] = best_threshold(valid, annotations)
+        validation_tables.append(valid)
+
+    done = ~np.isnan(proba)
+    predictions = windows.loc[done].assign(proba=proba[done].astype(np.float32))
+    predictions.to_parquet(out / "predictions" / f"{name}.parquet", index=False)
+    pd.concat(validation_tables).assign(proba=lambda t: t["proba"].astype(np.float32)).to_parquet(out / "predictions" / f"{name}_validation.parquet", index=False)
+
+    # Scores on the out-of-fold predictions (the project re-scores them with scripts/evaluate_cnn.py).
+    per_row = predictions["fold"].map(thresholds).to_numpy()
+    nested = event_counts(predictions, annotations, per_row)
+    best = best_threshold(predictions, annotations)
+    optimistic = event_counts(predictions, annotations, best)
+    print(f"\n{name}: fold thresholds (chosen on validation recordings) {thresholds}")
+    print(f"  nested     event F1 {nested['f1']:.3f}  found {nested['found']}/{nested['found'] + nested['missed']}  false alarms {nested['false_alarms']}")
+    print(f"  optimistic event F1 {optimistic['f1']:.3f} at {best:.2f}  found {optimistic['found']}  false alarms {optimistic['false_alarms']}")
+    print(f"  window average precision {average_precision_score(predictions['true_class'], predictions['proba']):.3f}")
+
+    config = {
+        "name": name, "arch": args.arch, "augment": args.augment, "channels": CHANNELS, "fs": FS, "window_s": args.window_s,
+        "window_samples": window_samples, "context": "centred on each 2 s window (1 s step)",
+        "normalization": "per recording and channel: (x - median) / (1.4826 * MAD), clipped at ±20",
+        "filter": "Butterworth band-pass 0.5-40 Hz, order 4, zero-phase, before normalization",
+        "loss": f"cross-entropy, class weights [1, {args.seizure_weight}]", "optimizer": f"AdamW lr {args.lr} wd {args.weight_decay}, cosine",
+        "batch": args.batch, "max_epochs": args.epochs, "patience": args.patience, "seeds": args.seeds,
+        "fold_thresholds": thresholds, "best_epochs": best_epochs,
+        "nested": nested, "optimistic": {**optimistic, "threshold": best}, "seconds": time.time() - started,
+    }
+
+    # Final model on all recordings, for use on new data: the median best epoch, no early stopping.
+    if not args.no_final and not args.quick:
+        epochs = max(1, int(np.median(best_epochs)))
+        everything = np.arange(len(windows))
+        model, _, log = train(args, X, y, everything, everything[:0], seed=0, device=device, fixed_epochs=epochs)
+        history["final"] = log
+        torch.save(model.state_dict(), out / "models" / f"{name}_final.pt")
+        config["final"] = {"epochs": epochs, "threshold": float(np.median(list(thresholds.values())))}
+        try:
+            model = model.float().cpu().eval()
+            torch.onnx.export(model, torch.zeros(1, len(CHANNELS), window_samples), out / "models" / f"{name}_final.onnx",
+                              input_names=["eeg"], output_names=["logits"], dynamic_axes={"eeg": {0: "batch"}, "logits": {0: "batch"}}, dynamo=False)
+        except Exception as error:  # ONNX is optional: the .pt weights are enough.
+            print(f"ONNX export skipped: {error}")
+    (out / f"{name}_config.json").write_text(json.dumps(config, indent=2, default=float) + "\n")
+    (out / f"{name}_history.json").write_text(json.dumps(history, indent=1) + "\n")
+    print(f"Saved in {out} ({(time.time() - started) / 60:.1f} min)")
+
+
+if __name__ == "__main__":
+    main()

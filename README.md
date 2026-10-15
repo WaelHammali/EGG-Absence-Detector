@@ -130,6 +130,7 @@ python scripts/train_registry.py       # 12 models = DT, RF, KNN, SVM × unbalan
 python scripts/prepare_app_data.py     # filtered signals, reference channels, metadata, technician events, comparison curves
 python scripts/evaluate_detection.py   # Part X–XI: threshold, outputs/detected_intervals.csv, figures, docs/PARTS_X_XI.md
 python scripts/compare_models.py       # docs/MODEL_COMPARISON.md
+python scripts/evaluate_nested.py      # nested threshold + SzCORE scoring of the 12 models → docs/NESTED_EVALUATION.md
 ```
 
 `train_registry.py` writes:
@@ -146,6 +147,18 @@ python scripts/detect.py --recording 190304A_E [--algo dt|rf|knn|svm] [--mode un
 ```
 
 Without `--algo` and `--mode`, the default model is used.
+
+### Deep learning models (Kaggle GPU)
+
+Compact CNNs trained directly on the cleaned 19-channel EEG, no hand-made features, to compare
+with the 12 classical models above. They need a GPU, so they train on Kaggle's free tier
+instead of this machine; step by step in [`docs/KAGGLE.md`](docs/KAGGLE.md):
+
+```bash
+python scripts/export_kaggle.py   # package the data as a private Kaggle dataset
+# upload it, then run kaggle/absence_seizure_cnn.ipynb on Kaggle (GPU), and download its output
+python scripts/evaluate_cnn.py    # score the downloaded predictions like the other 12 models
+```
 
 ## The app
 

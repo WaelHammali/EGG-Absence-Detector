@@ -13,6 +13,9 @@ data/excel/
 data/processed/
 /Annotations MAJ.xlsx
 
+# Built by scripts/export_kaggle.py for upload to Kaggle; rebuild with that script.
+data/kaggle/
+
 # The registered models are rebuilt by scripts/train_registry.py (the KNN file alone is 72 MB)
 models/*_balanced.joblib
 models/*_unbalanced.joblib
