@@ -1,22 +1,23 @@
-numpy
-scipy
-h5py
-pandas
-openpyxl
-matplotlib
-seaborn
-scikit-learn
-jupyter
-ipykernel
-mat-io==1.0.0
+# Versions used to build the dataset and train the models. Keep scikit-learn and joblib at
+# these versions to load the saved models (models/*.joblib).
+numpy==2.5.3
+scipy==1.18.1
+pandas==3.0.6
 pyarrow==25.0.1
+scikit-learn==1.9.1
+joblib==1.6.0
+mat-io==1.0.0
+h5py==3.16.0
+openpyxl==3.1.5
 XlsxWriter==3.2.9
 PyYAML==6.0.3
-joblib==1.6.0
+matplotlib==3.11.2
+seaborn==0.13.2
+# App
 dash==4.4.1
 dash-mantine-components==2.8.0
 dash-iconify==0.1.2
 plotly==6.9.0
 plotly-resampler==0.11.1
 # Optional, only for scripts/screenshot_app.py (also needs system chromium + chromedriver)
-selenium
+selenium==4.50.0

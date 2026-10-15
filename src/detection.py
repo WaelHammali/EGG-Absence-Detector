@@ -170,7 +170,3 @@ def sweep_thresholds(predictions: pd.DataFrame, annotations: pd.DataFrame, thres
         detected, matches = detect_all(predictions, annotations, float(threshold))
         rows.append({"threshold": float(threshold), "detections": len(detected), **event_metrics(matches, len(detected))})
     return pd.DataFrame(rows)
-
-
-def format_time(seconds: float) -> str:
-    return f"{seconds:.1f} s"

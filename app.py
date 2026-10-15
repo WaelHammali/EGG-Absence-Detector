@@ -44,7 +44,6 @@ CHANNEL_GROUPS = [
     for region in ("Frontal", "Central", "Temporal", "Parietal", "Occipital")
 ]
 GREEK = {"Delta": "δ", "Theta": "θ", "Alpha": "α", "Beta": "β"}
-# URL values for ?page=…, including the names used before the app was split in three parts.
 # Ranking columns: label, whether higher is better, formatter.
 RANKING = {
     "event_f1": ("Event F1", True, lambda value: f"{value:.3f}"),
@@ -61,6 +60,7 @@ RANKING = {
     "offset_error": ("Offset error (s)", False, lambda value: f"{value:+.2f}"),
     "fit_seconds": ("Training (s/fold)", False, lambda value: f"{value:.2f}"),
 }
+# URL values for ?page=…, including the names used before the app was split in three parts.
 PAGES = {
     "home": "home", "visualisation": "visualisation", "prediction": "prediction", "comparison": "comparison",
     "recording": "prediction", "overview": "comparison",
@@ -733,10 +733,6 @@ def show_all_channels(_):
 
 
 # ----------------------------------------------------------------------------- overview
-
-
-def percent(value) -> str:
-    return "—" if pd.isna(value) else f"{value:.0%}"
 
 
 def verdict_label(metrics: dict) -> tuple[str, str, str]:
