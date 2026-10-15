@@ -23,9 +23,9 @@ from sklearn.metrics import precision_recall_curve
 from src.detection import detect_all, event_metrics, sweep_thresholds
 from src.io import CHANNELS, FS
 from src.preprocessing import bandpass
+from src.paths import APP_DATA, recordings_dir
 
 
-APP_DATA = ROOT / "data/processed/app"
 SIGNALS = APP_DATA / "signals"
 REFERENCE = APP_DATA / "reference"
 REGISTRY = ROOT / "models/registry.json"
@@ -151,7 +151,7 @@ def main() -> None:
     original = workbook_rows(ROOT / "data/raw/Annotations.xlsx")
     metadata, events = [], []
     for recording, intervals in annotations.groupby("recording", sort=True):
-        frame = pd.read_parquet(ROOT / f"data/processed/official/{recording}.parquet")
+        frame = pd.read_parquet(recordings_dir("official") / f"{recording}.parquet")
         filtered = bandpass(frame.loc[:, CHANNELS].to_numpy(dtype=np.float32))
         output = pd.DataFrame(filtered, columns=CHANNELS)
         output.insert(0, "Time", frame["Time"].to_numpy())

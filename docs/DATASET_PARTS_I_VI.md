@@ -32,9 +32,9 @@ Feature columns comprise, per channel and averaged across channels: mean, standa
 
 Artifacts:
 
-- `data/excel/<recording>.xlsx`: labeled samples, split automatically at 1,048,575 data rows per sheet.
-- `data/processed/<recording>.parquet`: fast labeled sample copies.
-- `data/processed/windows_features.parquet`: final Parts I–VI feature table.
+- `data/excel/provisional_8ch/<recording>.xlsx`: labeled samples, split automatically at 1,048,575 data rows per sheet.
+- `data/processed/recordings/provisional_8ch/<recording>.parquet`: fast labeled sample copies.
+- `data/processed/datasets/provisional_8ch/windows_features.parquet`: final Parts I–VI feature table.
 - `outputs/window_counts.csv` and `outputs/dataset_summary.json`: machine-readable counts and schema.
 
 No model training or train/test splitting has been performed.

@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from src.io import CHANNELS
+from src.paths import PROVISIONAL_8CH, dataset_file
 
 
 METADATA = {"recording", "subject", "window", "start_s", "end_s", "class"}
@@ -36,11 +37,11 @@ DC_FEATURES = [f"avg_{name}" for name in ("mean", "min", "max", "rms", "energy")
 
 
 def dataset_path(mode: str, suffix: str = "") -> Path:
-    preferred = ROOT / f"data/processed/windows_features_{mode}{suffix}.parquet"
+    preferred = dataset_file(f"{mode}{suffix}")
     if preferred.exists():
         return preferred
     if mode == "provisional" and suffix == "_raw":
-        legacy = ROOT / "data/processed/windows_features.parquet"
+        legacy = dataset_file(PROVISIONAL_8CH)
         if legacy.exists():
             return legacy
     raise FileNotFoundError(f"Build {mode} dataset first: {preferred}")

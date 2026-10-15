@@ -30,16 +30,17 @@ sys.path.insert(0, str(ROOT))
 
 from src.detection import detect_all, event_metrics, sweep_thresholds
 from src.io import CHANNELS
+from src.paths import AUGMENTED as AUGMENTED_NAME, OFFICIAL, dataset_file
 from src.preprocessing import describe
 from train_models import METADATA, models as pipelines, undersample
 
 
-DATASET = ROOT / "data/processed/windows_features_official.parquet"
+DATASET = dataset_file(OFFICIAL)
 ANNOTATIONS = ROOT / "data/interim/official/annotations_clean.csv"
 PREDICTIONS = ROOT / "outputs/predictions"
 MODELS = ROOT / "models"
 ALGORITHMS = {"dt": "Decision Tree", "rf": "Random Forest", "knn": "KNN", "svm": "SVM"}
-AUGMENTED = ROOT / "data/processed/windows_features_official_augmented.parquet"
+AUGMENTED = dataset_file(AUGMENTED_NAME)
 MODES = ("unbalanced", "balanced", "augmented")
 BALANCED_SEEDS = (0, 1, 2, 3, 4)
 SAVED_SEED = 0

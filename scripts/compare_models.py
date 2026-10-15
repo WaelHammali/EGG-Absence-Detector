@@ -16,10 +16,10 @@ sys.path.insert(0, str(ROOT))
 
 from src.context import emg_ratio, hpn_periods, overlapping, sli_channel_active, sli_periods
 from src.detection import detect_all
+from src.paths import APP_DATA
 
 
 REGISTRY = ROOT / "models/registry.json"
-APP_DATA = ROOT / "data/processed/app"
 ANNOTATIONS = ROOT / "data/interim/official/annotations_clean.csv"
 MODE_NAMES = {"unbalanced": "non équilibré", "balanced": "équilibré", "augmented": "augmenté"}
 AUGMENTED_COUNTS = ROOT / "outputs/augmented_window_counts.csv"
@@ -120,7 +120,7 @@ def main() -> None:
             f"fenêtres décalées de 0,25, 0,5 et 0,75 s (même règle : au moins 50 % d’échantillons de crise), puis miroir gauche-droite de toutes les fenêtres de crise "
             f"(Fp1↔Fp2, F7↔F8, F3↔F4, T3↔T4, C3↔C4, T5↔T6, P3↔P4, O1↔O2). Sur les 21 enregistrements : {int(added['official_class_1']):,} fenêtres de crise d’origine "
             f"+ {int(added['augmented_total']):,} ajoutées ({int(added['shift']):,} décalées, {int(added['mirror']):,} miroirs, {int(added['shift+mirror']):,} décalées et miroirs), "
-            "gardées dans un fichier séparé (`data/processed/windows_features_official_augmented.parquet`, `python scripts/build_augmented.py`). "
+            "gardées dans un fichier séparé (`data/processed/datasets/augmented_shift_mirror/`, `python scripts/build_augmented.py`). "
             "Ces fenêtres se recouvrent fortement et viennent des mêmes crises : elles ajoutent des exemples, pas de nouvelles crises ni de nouveaux patients."
         )
     lines += [

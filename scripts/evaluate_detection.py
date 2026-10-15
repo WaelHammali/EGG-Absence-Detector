@@ -17,11 +17,11 @@ sys.path.insert(0, str(ROOT))
 
 from src.context import hpn_periods
 from src.detection import MIN_DURATION_S, MIN_GAP_S, detect_all, event_metrics, sweep_thresholds
+from src.paths import APP_DATA
 
 
 PREDICTIONS = ROOT / "outputs/predictions_oof.parquet"
 ANNOTATIONS = ROOT / "data/interim/official/annotations_clean.csv"
-APP_DATA = ROOT / "data/processed/app"
 FIGURES = ROOT / "outputs/figures/official/detection"
 # Same semantic colors as the app.
 REAL = "#34D399"

@@ -1,6 +1,6 @@
 # Parties VIII–IX — Modèles de classification
 
-Jeu de données : `data/processed/windows_features_official.parquet` (annotations officielles, signal filtré passe-bande 0,5–40 Hz, 320 caractéristiques sur 19 canaux EEG). Hyperparamètres par défaut de scikit-learn, sans réglage (prévu en Partie X). Arbre de décision et Random Forest sans normalisation; KNN et SVM avec `StandardScaler` dans le `Pipeline`, donc ajusté sur les seules données d’entraînement. `random_state=42` partout.
+Jeu de données : `data/processed/datasets/official/windows_features.parquet` (annotations officielles, signal filtré passe-bande 0,5–40 Hz, 320 caractéristiques sur 19 canaux EEG). Hyperparamètres par défaut de scikit-learn, sans réglage (prévu en Partie X). Arbre de décision et Random Forest sans normalisation; KNN et SVM avec `StandardScaler` dans le `Pipeline`, donc ajusté sur les seules données d’entraînement. `random_state=42` partout.
 
 ## Protocole
 

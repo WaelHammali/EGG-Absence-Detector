@@ -65,7 +65,7 @@ The augmented windows are cut again from the filtered signal, never invented:
 - **Shifted windows**: windows starting 0.25, 0.5 and 0.75 s after the regular ones, kept only if at least 50 % of the window is seizure (3,493 windows).
 - **Left-right mirror** of every seizure window, original and shifted: Fp1↔Fp2, F7↔F8, F3↔F4, T3↔T4, C3↔C4, T5↔T6, P3↔P4, O1↔O2; Fz, Cz and Pz stay in place (1,244 + 3,493 windows). This is valid because absence seizures are generalised, so they appear on both sides of the head.
 
-That makes 8,230 added windows, stored apart in `data/processed/windows_features_official_augmented.parquet`; the official dataset is not changed. A build check confirms that the regular windows reproduce the official dataset exactly.
+That makes 8,230 added windows, stored apart in `data/processed/datasets/augmented_shift_mirror/`; the official dataset is not changed. A build check confirms that the regular windows reproduce the official dataset exactly.
 
 ### 6. Validation
 
@@ -82,6 +82,10 @@ For each model, the threshold is the one between 0.05 and 0.99 that gives the hi
 ### Main limits
 
 21 recordings and 93 seizures, default hyperparameters. The missed seizures are mostly in the two oldest patients (17 and 25 years). About 41–46 % of the RF and SVM false alarms fall during hyperventilation, which is used to provoke seizures. Recording `210427B_C` shows several seizure-like bursts with only one annotated, so some "false alarms" may be real seizures.
+
+## Data layout
+
+Each recording set and each dataset has its own folder under `data/processed/` (`recordings/<set>/`, `datasets/<name>/`), with a README in each. The main dataset is `datasets/official/`; the augmented windows are in `datasets/augmented_shift_mirror/`; folders are ready for the methods planned in the research report (`augmented_both_classes/`, `deep_learning_4s/`, `hard_negatives/`). All paths are defined in [`src/paths.py`](src/paths.py); details in [`docs/DATA_LAYOUT.md`](docs/DATA_LAYOUT.md).
 
 ## Setup
 
@@ -188,6 +192,7 @@ Fonts (Google Fonts) and icons (Iconify) are loaded from the internet; offline, 
 
 ## Project structure
 
+- `src/paths.py`: where every recording set and dataset lives.
 - `src/io.py`: MATLAB timetable and annotation loading, channel lists.
 - `src/annotations.py`: provisional/official annotation resolution driven by `config/annotation_decisions.yaml`.
 - `src/labels.py`: sample-level binary labels.

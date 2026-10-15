@@ -11,14 +11,17 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from src.io import annotations_for_recording, load_annotations, load_recording, recording_ids
+from src.paths import EXCEL, recordings_dir
 from src.labels import add_class_column
 
 
 RAW = ROOT / "data/raw"
 ANNOTATIONS = ROOT / "data/interim/annotations_clean.csv"
 EXCLUSIONS = ROOT / "data/interim/exclusions.csv"
-EXCEL_DIR = ROOT / "data/excel"
-PROCESSED_DIR = ROOT / "data/processed"
+# Standalone runs use the provisional annotations; they never write into the archived
+# provisional_8ch folders.
+EXCEL_DIR = EXCEL / "provisional"
+PROCESSED_DIR = recordings_dir("provisional")
 EXCEL_MAX_DATA_ROWS = 1_048_575  # One row is reserved for column names.
 
 

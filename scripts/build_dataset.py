@@ -18,13 +18,13 @@ from convert_to_excel import convert_recording
 from src.annotations import resolve_annotations
 from src.features import extract_features
 from src.io import CHANNELS, annotations_for_recording
+from src.paths import EXCEL, PROVISIONAL_8CH, dataset_file, recordings_dir
 from src.labels import sample_labels
 from src.preprocessing import PREPROCESSING, describe, preprocess
 from src.segmentation import segment_labels, window_view
 
 
-PROCESSED = ROOT / "data/processed"
-EXCEL = ROOT / "data/excel"
+
 
 
 def seizure_window_coverage(segmentation, intervals: pd.DataFrame, fs: float = 256.0) -> tuple[int, int]:
@@ -141,7 +141,7 @@ def provisional_reference() -> tuple[list[dict], dict] | None:
         overall_rows = frame.loc[frame["recording"] == "OVERALL"]
         if not overall_rows.empty:
             return rows, overall_rows.iloc[0].to_dict()
-    dataset = PROCESSED / "windows_features.parquet"
+    dataset = dataset_file(PROVISIONAL_8CH)
     if not dataset.exists():
         return None
     frame = pd.read_parquet(dataset, columns=["recording", "class"])
@@ -304,8 +304,9 @@ def main() -> None:
     suffix = "" if args.preprocess == "bandpass" else "_raw"
     interim_dir = ROOT / f"data/interim/{mode}"
     excel_dir = EXCEL / mode
-    processed_dir = PROCESSED / mode
-    output = PROCESSED / f"windows_features_{mode}{suffix}.parquet"
+    processed_dir = recordings_dir(mode)
+    output = dataset_file(f"{mode}{suffix}")
+    output.parent.mkdir(parents=True, exist_ok=True)
     resolution = resolve_annotations(ROOT, mode, interim_dir, args.decisions)
     annotations = resolution["annotations"]
     excluded = set(resolution["excluded"])

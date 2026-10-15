@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from src.io import CHANNELS, FS, annotations_for_recording
+from src.paths import recordings_dir
 from src.preprocessing import BANDPASS_HZ, BANDPASS_ORDER, bandpass
 
 
@@ -30,7 +31,7 @@ def main() -> None:
     parser.add_argument("--context", type=float, default=10.0)
     args = parser.parse_args()
 
-    frame = pd.read_parquet(ROOT / f"data/processed/official/{args.recording}.parquet")
+    frame = pd.read_parquet(recordings_dir("official") / f"{args.recording}.parquet")
     raw = frame.loc[:, CHANNELS].to_numpy(dtype=np.float32)
     # Filter the whole recording, exactly as the dataset build does, then crop.
     filtered = bandpass(raw)

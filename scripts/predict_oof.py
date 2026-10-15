@@ -18,13 +18,14 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from src.detection import detect_all, event_metrics, sweep_thresholds
+from src.paths import OFFICIAL, dataset_file
 from src.preprocessing import describe
 from train_models import models as candidate_models
 
 
 SEED = 42
 METADATA = {"recording", "subject", "window", "start_s", "end_s", "class"}
-DATASET = ROOT / "data/processed/windows_features_official.parquet"
+DATASET = dataset_file(OFFICIAL)
 PREDICTIONS = ROOT / "outputs/predictions_oof.parquet"
 MODEL = ROOT / "models/rf_final.joblib"
 ALL_PREDICTIONS = ROOT / "outputs/predictions_oof_models.parquet"

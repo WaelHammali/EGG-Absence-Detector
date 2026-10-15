@@ -12,10 +12,10 @@ import pandas as pd
 
 from src.detection import detect_all, event_metrics, match_events, windows_to_intervals
 from src.io import CHANNELS, FS
+from src.paths import APP_DATA
 
 
 ROOT = Path(__file__).resolve().parents[1]
-APP_DATA = ROOT / "data/processed/app"
 REGISTRY = ROOT / "models/registry.json"
 REQUIRED = {
     "models/registry.json": "python scripts/train_registry.py",

@@ -35,6 +35,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from src.io import CHANNELS
+from src.paths import OFFICIAL, dataset_file
 
 
 SEED = 42
@@ -391,7 +392,7 @@ def write_report(
 
 def main() -> None:
     parser = ArgumentParser()
-    parser.add_argument("--dataset", default=str(ROOT / "data/processed/windows_features_official.parquet"))
+    parser.add_argument("--dataset", default=str(dataset_file(OFFICIAL)))
     args = parser.parse_args()
     dataset = Path(args.dataset)
     frame = pd.read_parquet(dataset)
