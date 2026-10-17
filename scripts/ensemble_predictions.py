@@ -4,7 +4,7 @@ The cheapest way to try to beat a single model (research report, part A7): avera
 probabilities of two models that make different kinds of mistakes, window by window. No
 retraining. Works on any mix of the 12 registered classical models and external predictions
 with the same schema (recording, window, start_s, end_s, true_class, fold, proba) — in
-particular the CNN predictions downloaded from Kaggle (outputs/kaggle/cnn_outputs/predictions/).
+particular the CNN predictions in outputs/predictions/cnn_*.parquet.
 
 Threshold, two ways (no model here was retrained, so there is nothing to choose a threshold
 "inside"; both avoid ever using a fold's own predictions to pick its threshold):
@@ -16,7 +16,7 @@ Threshold, two ways (no model here was retrained, so there is nothing to choose 
 Usage:
     python scripts/ensemble_predictions.py --models svm_unbalanced rf_unbalanced
     python scripts/ensemble_predictions.py --models svm_unbalanced \
-        --extra outputs/kaggle/cnn_outputs/predictions/cnn_shallow_augmented.parquet
+        --extra outputs/predictions/cnn_shallow_augmented.parquet
     python scripts/ensemble_predictions.py --models svm_unbalanced rf_unbalanced --weights 2 1
 
 Outputs: outputs/ensemble_evaluation.csv, docs/ENSEMBLE_RESULTS.md.
@@ -95,7 +95,7 @@ def held_out_fold_score(table: pd.DataFrame, annotations: pd.DataFrame) -> tuple
 def main() -> None:
     parser = ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--models", nargs="*", default=[], help="Registered model keys to blend (models/registry.json)")
-    parser.add_argument("--extra", nargs="*", default=[], help="External predictions.parquet files to blend in (e.g. a Kaggle CNN run)")
+    parser.add_argument("--extra", nargs="*", default=[], help="External predictions.parquet files to blend in (e.g. a CNN run)")
     parser.add_argument("--weights", nargs="*", type=float, help="One weight per source, in the order --models then --extra (default: equal)")
     parser.add_argument("--name", help="Label for the report (default: built from the sources)")
     args = parser.parse_args()

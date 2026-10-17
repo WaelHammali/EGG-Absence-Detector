@@ -1,7 +1,8 @@
-"""Train compact CNNs to detect absence seizures from the cleaned EEG (Kaggle, GPU).
+"""Train compact CNNs to detect absence seizures from the cleaned EEG (GPU recommended).
 
-Self-contained: needs only numpy, pandas, pyarrow, scikit-learn and PyTorch (all preinstalled
-on Kaggle). Input: the private dataset written by scripts/export_kaggle.py.
+Self-contained: needs only numpy, pandas, pyarrow, scikit-learn and PyTorch, so it can be copied
+to any GPU machine. Input: the folder written by scripts/export_cnn_data.py. It also holds the
+model definitions (ShallowConvNet, EEGNet) needed to load the weights in models/cnn/.
 
 Method (research report, part A8):
 - Input: 4 s of the 19 filtered channels (1,024 samples) centred on each 2 s window of the
@@ -36,7 +37,7 @@ uses a boolean mask on arrays taken directly from the table, which is always cor
 regardless of its index. Verified to reproduce the exact same numbers as before everywhere
 the old code happened to work, and to no longer crash where it did.
 
-Outputs in /kaggle/working/cnn_outputs/ (or --out):
+Outputs in --out (default outputs/cnn/):
 - predictions/<name>.parquet: out-of-fold probability of every window (same format as
   outputs/predictions/*.parquet of the project);
 - predictions/<name>_validation.parquet: probabilities of the held-out training recordings,
@@ -44,11 +45,13 @@ Outputs in /kaggle/working/cnn_outputs/ (or --out):
 - models/<name>_fold<k>_seed<s>.pt, and models/<name>_final.pt (+ .onnx when possible): weights;
 - <name>_config.json and <name>_history.json.
 
-Usage on Kaggle (Notebook → Settings: Accelerator GPU T4 or P100; add the dataset as input):
-    !python train_cnn.py --arch shallow
-    !python train_cnn.py --arch shallow --augment
-    !python train_cnn.py --arch eegnet --augment
-Quick check (CPU, minutes): python train_cnn.py --data <folder> --quick
+Usage (about 30-40 minutes per run on a T4 GPU):
+    python train_cnn.py --data data/cnn --arch shallow
+    python train_cnn.py --data data/cnn --arch shallow --augment
+    python train_cnn.py --data data/cnn --arch eegnet --augment
+Quick check (minutes): python train_cnn.py --data data/cnn --quick
+Copy predictions/<name>.parquet to outputs/predictions/ and the models/ and *_config.json files to
+models/cnn/, then score with scripts/evaluate_cnn.py.
 """
 
 from __future__ import annotations
@@ -83,8 +86,8 @@ THRESHOLDS = np.round(np.arange(0.05, 0.995, 0.01), 2)
 
 def arguments(argv=None):
     parser = argparse.ArgumentParser(description="Train compact CNNs for absence-seizure detection.")
-    parser.add_argument("--data", help="Folder with windows.csv and signals/ (default: found under /kaggle/input)")
-    parser.add_argument("--out", default="/kaggle/working/cnn_outputs" if Path("/kaggle/working").exists() else "cnn_outputs")
+    parser.add_argument("--data", default="data/cnn", help="Folder with windows.csv and signals/ (written by scripts/export_cnn_data.py)")
+    parser.add_argument("--out", default="outputs/cnn")
     parser.add_argument("--arch", choices=["shallow", "eegnet"], default="shallow")
     parser.add_argument("--augment", action="store_true", help="Online augmentation of both classes")
     parser.add_argument("--window-s", type=float, default=4.0, help="Input length in seconds, centred on each 2 s window")
@@ -107,12 +110,11 @@ def arguments(argv=None):
     return args
 
 
-def find_data(path: str | None) -> Path:
-    if path:
-        return Path(path)
-    for candidate in Path("/kaggle/input").rglob("windows.csv"):
-        return candidate.parent
-    raise FileNotFoundError("windows.csv not found: add the dataset to the notebook or pass --data")
+def find_data(path: str) -> Path:
+    folder = Path(path)
+    if not (folder / "windows.csv").exists():
+        raise FileNotFoundError(f"{folder / 'windows.csv'} not found: run scripts/export_cnn_data.py or pass --data")
+    return folder
 
 
 # ----------------------------------------------------------------------------- data

@@ -13,10 +13,13 @@ data/excel/
 data/processed/
 /Annotations MAJ.xlsx
 
-# Built by scripts/export_kaggle.py for upload to Kaggle; rebuild with that script.
-data/kaggle/
+# Built by scripts/export_cnn_data.py (patient EEG copy for GPU training); rebuild with that script.
+data/cnn/
 
 # The registered models are rebuilt by scripts/train_registry.py (the KNN file alone is 72 MB)
 models/*_balanced.joblib
 models/*_unbalanced.joblib
 models/*_augmented.joblib
+
+# Intermediate cache of scripts/evaluate_nested.py (inner thresholds per model)
+outputs/nested/

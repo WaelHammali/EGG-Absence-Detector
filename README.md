@@ -13,7 +13,8 @@ The pipeline reads the MATLAB recordings, aligns the neurologist's annotations, 
 | Windows | 31,419, of which 1,244 are seizure windows (3.96 %) |
 | Features per window | 320 |
 | Models | 4 algorithms × 3 training modes = 12 |
-| Best model | **SVM, unbalanced**: event F1 0.894, 86 of 93 seizures found, 16 false alarms (1.8 per hour), threshold 0.82 |
+| Best single model | **SVM, unbalanced**: event F1 0.894, 86 of 93 seizures found, 16 false alarms (1.8 per hour), threshold 0.82 |
+| Best blend | **SVM + ShallowConvNet**: event F1 0.901, 90 of 93 found, 19 false alarms, threshold chosen on the other folds only |
 
 Event F1 at each model's best threshold (scores on unseen patients):
 
@@ -130,7 +131,7 @@ python scripts/train_registry.py       # 12 models = DT, RF, KNN, SVM × unbalan
 python scripts/prepare_app_data.py     # filtered signals, reference channels, metadata, technician events, comparison curves
 python scripts/evaluate_detection.py   # Part X–XI: threshold, outputs/detected_intervals.csv, figures, docs/PARTS_X_XI.md
 python scripts/compare_models.py       # docs/MODEL_COMPARISON.md
-python scripts/evaluate_nested.py      # nested threshold + SzCORE scoring of the 12 models → docs/NESTED_EVALUATION.md
+python scripts/evaluate_nested.py      # optional, slow: nested threshold + SzCORE scoring of the 12 models → docs/NESTED_EVALUATION.md
 ```
 
 `train_registry.py` writes:
@@ -148,17 +149,22 @@ python scripts/detect.py --recording 190304A_E [--algo dt|rf|knn|svm] [--mode un
 
 Without `--algo` and `--mode`, the default model is used.
 
-### Deep learning models (Kaggle GPU)
+### Deep learning models
 
-Compact CNNs trained directly on the cleaned 19-channel EEG, no hand-made features, to compare
-with the 12 classical models above. They need a GPU, so they train on Kaggle's free tier
-instead of this machine; step by step in [`docs/KAGGLE.md`](docs/KAGGLE.md):
+Compact CNNs (ShallowConvNet, EEGNet) trained directly on the cleaned 19-channel EEG, with no
+hand-made features, to compare with the classical models. They need a GPU, so training runs on
+a separate GPU machine; the results, weights and predictions are kept here.
 
 ```bash
-python scripts/export_kaggle.py   # package the data as a private Kaggle dataset
-# upload it, then run kaggle/absence_seizure_cnn.ipynb on Kaggle (GPU), and download its output
-python scripts/evaluate_cnn.py    # score the downloaded predictions like the other 12 models
+python scripts/export_cnn_data.py                                   # package the cleaned signals → data/cnn/ (git-ignored, patient data)
+python scripts/train_cnn.py --data data/cnn --arch shallow --augment  # on the GPU machine, ~35 min; also --arch eegnet, without --augment
+python scripts/evaluate_cnn.py                                      # score them like the 12 classical models → docs/DEEP_LEARNING_RESULTS.md
 ```
+
+After training, copy `predictions/<name>.parquet` to `outputs/predictions/` and the `models/`
+files and `*_config.json` to `models/cnn/` (see [`models/cnn/README.md`](models/cnn/README.md)).
+Results: [`docs/DEEP_LEARNING_RESULTS.md`](docs/DEEP_LEARNING_RESULTS.md) — the best CNN
+(ShallowConvNet, augmented) reaches event F1 0.815 (nested threshold), below the SVM.
 
 ### Ensembles
 
@@ -167,7 +173,7 @@ score the blend the same honest way (threshold never chosen on the fold it is ap
 
 ```bash
 python scripts/ensemble_predictions.py --models svm_unbalanced rf_unbalanced
-python scripts/ensemble_predictions.py --models svm_unbalanced --extra outputs/kaggle/cnn_outputs/predictions/cnn_shallow_augmented.parquet
+python scripts/ensemble_predictions.py --models svm_unbalanced --extra outputs/predictions/cnn_shallow_augmented.parquet
 ```
 
 Report: [`docs/ENSEMBLE_RESULTS.md`](docs/ENSEMBLE_RESULTS.md).
@@ -212,20 +218,39 @@ Fonts (Google Fonts) and icons (Iconify) are loaded from the internet; offline, 
 | [`docs/PARTS_X_XI.md`](docs/PARTS_X_XI.md) | Temporal detection and error analysis (Random Forest) |
 | [`docs/MODEL_COMPARISON.md`](docs/MODEL_COMPARISON.md) | The 12 models: scores, seeds, false alarms against hyperventilation and SLI, conclusion |
 | [`docs/CHANNELS_8_VS_19.md`](docs/CHANNELS_8_VS_19.md) | 8 channels against 19 channels (the 8-channel results are in `outputs/archive_8ch/`) |
+| [`docs/DEEP_LEARNING_RESULTS.md`](docs/DEEP_LEARNING_RESULTS.md) | The 3 CNNs against the SVM: nested threshold, smoothing, SzCORE |
+| [`docs/ENSEMBLE_RESULTS.md`](docs/ENSEMBLE_RESULTS.md) | Blends of models (SVM + RF, SVM + CNN, ...) |
+| [`docs/DATA_LAYOUT.md`](docs/DATA_LAYOUT.md) | What each folder under `data/` contains |
 | [`docs/ANNOTATION_DECISIONS.md`](docs/ANNOTATION_DECISIONS.md) | Decisions on the annotation special cases |
 | [`docs/DATASET_PARTS_I_VI.md`](docs/DATASET_PARTS_I_VI.md) | Provisional dataset (inferred offsets); `200625A_F` and `210427B_C` excluded there, see `data/interim/exclusions.csv` |
 
 ## Project structure
 
-- `src/paths.py`: where every recording set and dataset lives.
-- `src/io.py`: MATLAB timetable and annotation loading, channel lists.
-- `src/annotations.py`: provisional/official annotation resolution driven by `config/annotation_decisions.yaml`.
-- `src/labels.py`: sample-level binary labels.
-- `src/preprocessing.py`: band-pass filtering before segmentation.
-- `src/segmentation.py`: 2 s windows with 50 % overlap.
-- `src/features.py`: per-channel and across-channel time/frequency features.
-- `src/detection.py`: window probabilities → seizure intervals, event-level comparison with annotations.
-- `src/context.py`: hyperventilation and SLI periods, EMG bursts, for the false-alarm analysis.
-- `src/app_data.py`, `src/app_figures.py`, `src/app_home.py`, `assets/app.css`: data access, themed figures, Home page and styles of `app.py`.
-- `scripts/`: one script per step (see Commands).
-- `outputs/`: figures, predictions, counts (`augmented_window_counts.csv`), app screenshots.
+```text
+.
+├── app.py                   Dash app (python app.py)
+├── assets/                  app styles
+├── config/                  annotation decisions (YAML)
+├── data/                    not in git: raw/, interim/, processed/ (see docs/DATA_LAYOUT.md), cnn/ (GPU training package)
+├── docs/                    reports (one per topic) and design notes
+├── models/                  registry.json + the 12 classical models; cnn/ = CNN weights and configs
+├── outputs/                 figures, predictions (outputs/predictions/), result tables
+├── scripts/                 one script per pipeline step (see Commands)
+├── src/                     library code used by the scripts and the app
+├── requirements.txt
+├── README.md
+└── CLAUDE.md                short project notes for coding assistants
+```
+
+`src/`:
+
+- `paths.py`: where every recording set and dataset lives.
+- `io.py`: MATLAB timetable and annotation loading, channel lists.
+- `annotations.py`: provisional/official annotation resolution driven by `config/annotation_decisions.yaml`.
+- `labels.py`: sample-level binary labels.
+- `preprocessing.py`: band-pass filtering before segmentation.
+- `segmentation.py`: 2 s windows with 50 % overlap.
+- `features.py`: per-channel and across-channel time/frequency features.
+- `detection.py`: window probabilities → seizure intervals (plain, smoothed, hysteresis), event-level comparison with annotations.
+- `context.py`: hyperventilation and SLI periods, EMG bursts, for the false-alarm analysis.
+- `app_data.py`, `app_figures.py`, `app_home.py`: data access, themed figures and Home page of `app.py`.

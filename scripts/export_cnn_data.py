@@ -1,18 +1,17 @@
-"""Package the cleaned EEG for training deep learning models on Kaggle.
+"""Package the cleaned EEG for training the deep learning models (scripts/train_cnn.py).
 
-Writes data/kaggle/eeg-absence/ (git-ignored, about 300 MB), to upload as a PRIVATE Kaggle dataset:
+Writes data/cnn/ (git-ignored, about 800 MB), to copy to the GPU machine that trains them:
 - signals/<recording>.parquet: the 19 EEG channels after the 0.5-40 Hz band-pass (float32, µV)
   and the per-sample label `label` (official annotations);
 - windows.csv: the 31,419 windows of the official dataset (recording, window, start_s, end_s,
   true_class) with the outer `fold` (1-5) used by every model here, so the deep models are scored
   on exactly the same windows and folds;
-- annotations.csv, recordings.csv (duration, sex, age) and dataset-metadata.json for the Kaggle CLI.
+- annotations.csv, recordings.csv (duration, sex, age).
 
-Only recording codes are exported: no names or dates.
+Only recording codes are exported: no names or dates. Keep the package private: it is patient EEG.
 """
 
 from pathlib import Path
-import json
 import shutil
 import sys
 
@@ -26,7 +25,7 @@ from src.io import CHANNELS
 from src.paths import APP_DATA, DATA, OFFICIAL, recordings_dir
 
 
-OUT = DATA / "kaggle" / "eeg-absence"
+OUT = DATA / "cnn"
 PREDICTIONS = ROOT / "outputs/predictions/svm_unbalanced.parquet"
 ANNOTATIONS = ROOT / "data/interim/official/annotations_clean.csv"
 
@@ -48,14 +47,9 @@ def main() -> None:
     windows.to_csv(OUT / "windows.csv", index=False)
     pd.read_csv(ANNOTATIONS)[["recording", "start_s", "end_s"]].to_csv(OUT / "annotations.csv", index=False)
     metadata[["recording", "duration_s", "sex", "age"]].to_csv(OUT / "recordings.csv", index=False)
-    (OUT / "dataset-metadata.json").write_text(json.dumps({
-        "title": "EEG absence seizures (private)",
-        "id": "YOUR_KAGGLE_USERNAME/eeg-absence",
-        "licenses": [{"name": "other"}],
-    }, indent=2) + "\n")
     size = sum(path.stat().st_size for path in OUT.rglob("*") if path.is_file()) / 1e6
     print(f"{len(windows):,} windows, {windows['true_class'].sum():,} seizure windows, folds {sorted(windows['fold'].unique())}")
-    print(f"Package: {OUT} ({size:.0f} MB). Upload it as a private Kaggle dataset.")
+    print(f"Package: {OUT} ({size:.0f} MB). Train with: python scripts/train_cnn.py --data data/cnn")
 
 
 if __name__ == "__main__":

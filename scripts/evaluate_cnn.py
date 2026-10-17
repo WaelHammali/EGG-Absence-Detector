@@ -1,18 +1,18 @@
-"""Score the CNN predictions trained on Kaggle (kaggle/train_cnn.py) like the classical models.
+"""Score the CNN predictions (trained with scripts/train_cnn.py) like the classical models.
 
-Reads the zip downloaded from the Kaggle notebook (see docs/KAGGLE.md), re-scores every CNN's
-out-of-fold predictions with this project's own code (src/detection.py: same event matching,
+Reads the CNN configs in models/cnn/ and their out-of-fold predictions in outputs/predictions/,
+re-scores every CNN with this project's own code (src/detection.py: same event matching,
 same threshold sweep as the classical models) and with SzCORE (reusing scripts/evaluate_nested.py
 for the exact same scoring code), and writes a report comparing them with the SVM baseline.
 
 Two thresholds per model, as for the classical models:
-- nested: each outer fold scored with its own threshold, taken from the Kaggle run's
+- nested: each outer fold scored with its own threshold, taken from the run's
   fold_thresholds (chosen only on 3 held-out training recordings, never the test fold);
 - optimistic: one threshold chosen on all out-of-fold predictions (reference only).
 
-Usage, after unzipping the Kaggle output into outputs/kaggle/cnn_outputs/:
+Usage:
     python scripts/evaluate_cnn.py
-    python scripts/evaluate_cnn.py --dir path/to/unzipped/cnn_outputs
+    python scripts/evaluate_cnn.py --configs models/cnn --predictions outputs/predictions
 
 Outputs: outputs/cnn_evaluation.csv, docs/DEEP_LEARNING_RESULTS.md. Nothing else is changed:
 the registered models and the app are not touched.
@@ -36,7 +36,8 @@ from evaluate_nested import szcore
 from train_registry import THRESHOLDS, best_threshold
 
 
-DEFAULT_DIR = ROOT / "outputs/kaggle/cnn_outputs"
+CONFIGS = ROOT / "models/cnn"
+PREDICTIONS = ROOT / "outputs/predictions"
 REGISTRY = ROOT / "models/registry.json"
 ANNOTATIONS = ROOT / "data/interim/official/annotations_clean.csv"
 APP_METADATA = ROOT / "data/processed/app/recording_metadata.csv"
@@ -49,12 +50,12 @@ def label(config: dict) -> str:
     return f"{ARCH_NAMES.get(config['arch'], config['arch'])}, {'augmented' if config['augment'] else 'plain'}"
 
 
-def find_runs(directory: Path) -> list[tuple[str, Path, dict]]:
-    """Every CNN run in the Kaggle output: (name, predictions file, config)."""
+def find_runs(configs: Path, predictions: Path) -> list[tuple[str, Path, dict]]:
+    """Every CNN run: (name, predictions file, config)."""
     runs = []
-    for config_path in sorted(directory.glob("*_config.json")):
+    for config_path in sorted(configs.glob("*_config.json")):
         config = json.loads(config_path.read_text())
-        predictions_path = directory / "predictions" / f"{config['name']}.parquet"
+        predictions_path = predictions / f"{config['name']}.parquet"
         if not predictions_path.exists():
             print(f"skipping {config['name']}: {predictions_path.name} not found", flush=True)
             continue
@@ -105,26 +106,21 @@ def baseline_row(registry: dict) -> dict:
     return {
         "name": default, "label": entry["label"], "event_f1": event["f1"], "found": event["tp"], "missed": event["fn"],
         "false_alarms": event["fp"], "false_alarms_per_hour": event["false_alarms_per_hour"], "threshold": entry["best_threshold"],
-        "kind": "optimistic (registry; nested evaluation of the classical models is separate, see docs/NESTED_EVALUATION.md)",
+        "kind": "optimistic (registry; the classical models are not re-scored with a nested threshold)",
     }
 
 
 def main() -> None:
     parser = ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--dir", default=str(DEFAULT_DIR), help="Unzipped Kaggle output folder (contains *_config.json and predictions/)")
+    parser.add_argument("--configs", default=str(CONFIGS), help="Folder with the CNN *_config.json files")
+    parser.add_argument("--predictions", default=str(PREDICTIONS), help="Folder with the CNN out-of-fold predictions (<name>.parquet)")
     parser.add_argument("--smooth-window", type=int, default=3, help="Moving-median window (odd number of windows) before hysteresis; 1 disables it")
     parser.add_argument("--hysteresis-gap", type=float, default=0.3, help="low threshold = each fold's threshold minus this; an event survives a dip down to low")
     parser.add_argument("--no-smooth", action="store_true", help="Skip the smoothed+hysteresis scoring entirely")
     args = parser.parse_args()
-    directory = Path(args.dir)
-    if not directory.exists():
-        raise SystemExit(
-            f"{directory} not found.\nDownload cnn_outputs.zip from the Kaggle notebook's Output tab, then:\n"
-            f"  mkdir -p {DEFAULT_DIR.parent}\n  unzip cnn_outputs.zip -d {DEFAULT_DIR}\nSee docs/KAGGLE.md."
-        )
-    runs = find_runs(directory)
+    runs = find_runs(Path(args.configs), Path(args.predictions))
     if not runs:
-        raise SystemExit(f"No *_config.json found in {directory}. Did the Kaggle notebook finish at least one full run?")
+        raise SystemExit(f"No CNN run found: expected *_config.json in {args.configs} and <name>.parquet in {args.predictions}.")
 
     annotations = pd.read_csv(ANNOTATIONS)
     durations = pd.read_csv(APP_METADATA).set_index("recording")["duration_s"]
@@ -178,10 +174,10 @@ def write_report(table: pd.DataFrame) -> None:
     best_kind = effective[order[0]][0] if order else None
 
     lines = [
-        "# Deep learning results (Kaggle)",
+        "# Deep learning results",
         "",
-        "Compact CNNs trained directly on the cleaned 19-channel EEG (no hand-made features), on Kaggle's free GPU. "
-        "Method, input pipeline and training recipe: [`kaggle/train_cnn.py`](../kaggle/train_cnn.py); how to reproduce: [`docs/KAGGLE.md`](KAGGLE.md).",
+        "Compact CNNs trained directly on the cleaned 19-channel EEG (no hand-made features), trained on a GPU. "
+        "Training recipe and model definitions: [`scripts/train_cnn.py`](../scripts/train_cnn.py); weights: [`models/cnn/`](../models/cnn/).",
         "",
         "- **Nested threshold** (main number): each of the 5 outer folds (same `GroupKFold` as every other model here) is scored with its own threshold, "
         "chosen only on 3 training recordings held out from that fold and never seen by the test fold. This is the fair number to compare with the SVM.",
@@ -194,9 +190,10 @@ def write_report(table: pd.DataFrame) -> None:
         )
     lines += [
         "- **Optimistic threshold**: one threshold chosen on all out-of-fold predictions at once, kept only for reference (this is how the classical "
-        "models' registry numbers below are computed too, pending their own nested re-evaluation — see `docs/NESTED_EVALUATION.md`).",
+        "models' registry numbers are computed too, so the SVM baseline row below is optimistic in the same way: compare it with the CNNs' optimistic "
+        "scores for a like-for-like gap, or run `python scripts/evaluate_nested.py` to re-score the classical models with a nested threshold).",
         "- **SzCORE**: event scoring from the [SzCORE framework](https://pypi.org/project/timescoring/) (30 s / 60 s tolerance, events closer than 90 s merged), "
-        "given for comparison with the literature; not directly comparable to this project's own event F1 (see `docs/NESTED_EVALUATION.md` for why).",
+        "given for comparison with the literature; not directly comparable to this project's own event F1 (SzCORE merges events closer than 90 s, and several absences occur closer together than that).",
         "- **Window AP**: average precision of the raw per-window probability (threshold-independent), each window scored by a model that never saw its patient.",
         "",
         "## Results",
@@ -268,15 +265,15 @@ def write_report(table: pd.DataFrame) -> None:
         lines.append(
             "- **Optimism of the CNNs' own threshold choice** (nested − optimistic event F1): "
             + ", ".join(f"{label} {value:+.3f}" for label, value in drop)
-            + ". A negative value is how much the single-threshold number overstates the model; the same gap the classical models show "
-            "(see `docs/NESTED_EVALUATION.md`), and the reason the nested number is the one to trust."
+            + ". A negative value is how much the single-threshold number overstates the model; the same kind of gap the classical models "
+            "have, and the reason the nested number is the one to trust."
         )
     lines += [
         "- **Augmentation** (amplitude scaling, noise, channel dropout, left-right mirror, applied to both classes so the seizure share "
         "stays near 4 %, unlike the classical models' first augmentation attempt) is compared against the plain CNN when both were run.",
         "",
-        "Reproduction: train on Kaggle (`kaggle/absence_seizure_cnn.ipynb`, see `docs/KAGGLE.md`), download the output, then "
-        "`python scripts/evaluate_cnn.py`. Raw numbers: `outputs/cnn_evaluation.csv`.",
+        "Reproduction: `python scripts/export_cnn_data.py`, train on a GPU with `python scripts/train_cnn.py --data data/cnn ...`, "
+        "copy the outputs to `models/cnn/` and `outputs/predictions/`, then `python scripts/evaluate_cnn.py`. Raw numbers: `outputs/cnn_evaluation.csv`.",
         "",
     ]
     REPORT.write_text("\n".join(lines))

@@ -1,5 +1,5 @@
 name,label,event_f1,found,missed,false_alarms,false_alarms_per_hour,threshold,kind,window_ap,szcore_event_f1,szcore_sensitivity,szcore_fp_per_day,fold_thresholds
-svm_unbalanced,SVM · Unbalanced,0.894160399737546,86,7,16,1.8320610153529913,0.82,"optimistic (registry; nested evaluation of the classical models is separate, see docs/NESTED_EVALUATION.md)",,,,,
+svm_unbalanced,SVM · Unbalanced,0.894160399737546,86,7,16,1.8320610153529913,0.82,optimistic (registry; the classical models are not re-scored with a nested threshold),,,,,
 cnn_eegnet_augmented,"EEGNet, augmented",0.7757986162225821,85,8,45,5.1526717557251915,,nested,0.6684827950828381,0.8345323741007195,0.8923076923076924,43.969465648854964,"{'1': 0.93, '2': 0.98, '3': 0.57, '4': 0.99, '5': 0.99}"
 cnn_eegnet_augmented,"EEGNet, augmented",0.8261474269819193,81,12,24,2.7480916030534353,0.99,optimistic,0.6684827950828381,,,,
 cnn_eegnet_augmented,"EEGNet, augmented",0.8109607277568227,85,8,32,3.6641221374045805,,nested_smoothed,0.6684827950828381,0.8405797101449275,0.8923076923076924,41.221374045801525,"{'1': 0.93, '2': 0.98, '3': 0.57, '4': 0.99, '5': 0.99}"
