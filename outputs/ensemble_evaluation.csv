@@ -1,0 +1,10 @@
+name,label,kind,event_f1,found,missed,false_alarms,false_alarms_per_hour,szcore_event_f1,szcore_sensitivity,fold_thresholds,threshold
+ensemble,SVM · Unbalanced + KNN · Unbalanced,held_out_fold,0.8713811105837684,81,12,15,1.717557251908397,0.8721804511278195,0.8923076923076924,"{""1"": 0.76, ""2"": 0.8, ""3"": 0.76, ""4"": 0.69, ""5"": 0.76}",
+ensemble,SVM · Unbalanced + KNN · Unbalanced,optimistic,0.9017428643596866,85,8,13,1.4885496183206108,,,,0.76
+ensemble,SVM · Unbalanced + Random Forest · Unbalanced + KNN · Unbalanced,held_out_fold,0.8738561448391223,83,10,18,2.0610687022900764,0.8805970149253731,0.9076923076923076,"{""1"": 0.78, ""2"": 0.74, ""3"": 0.73, ""4"": 0.68, ""5"": 0.73}",
+ensemble,SVM · Unbalanced + Random Forest · Unbalanced + KNN · Unbalanced,optimistic,0.9031710079275196,87,6,16,1.8320610687022905,,,,0.73
+ensemble,2×SVM · Unbalanced + Random Forest · Unbalanced,held_out_fold,0.8491935062901289,83,10,23,2.6335877862595423,0.8702290076335878,0.8769230769230769,"{""1"": 0.85, ""2"": 0.73, ""3"": 0.78, ""4"": 0.65, ""5"": 0.85}",
+ensemble,2×SVM · Unbalanced + Random Forest · Unbalanced,optimistic,0.8902743142144638,85,8,16,1.8320610687022905,,,,0.78
+svm_unbalanced,SVM · Unbalanced,"baseline (registry, optimistic)",0.894160399737546,86,7,16,1.8320610153529913,,,,
+ensemble,SVM · Unbalanced + Random Forest · Unbalanced,held_out_fold,0.8940646130728774,85,8,15,1.717557251908397,0.8939393939393939,0.9076923076923077,"{""1"": 0.78, ""2"": 0.77, ""3"": 0.78, ""4"": 0.78, ""5"": 0.78}",
+ensemble,SVM · Unbalanced + Random Forest · Unbalanced,optimistic,0.9017428643596866,85,8,13,1.4885496183206108,,,,0.78

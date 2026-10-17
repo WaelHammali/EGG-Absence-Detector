@@ -160,6 +160,18 @@ python scripts/export_kaggle.py   # package the data as a private Kaggle dataset
 python scripts/evaluate_cnn.py    # score the downloaded predictions like the other 12 models
 ```
 
+### Ensembles
+
+Blend the out-of-fold probabilities of several already-trained models (no retraining) and
+score the blend the same honest way (threshold never chosen on the fold it is applied to):
+
+```bash
+python scripts/ensemble_predictions.py --models svm_unbalanced rf_unbalanced
+python scripts/ensemble_predictions.py --models svm_unbalanced --extra outputs/kaggle/cnn_outputs/predictions/cnn_shallow_augmented.parquet
+```
+
+Report: [`docs/ENSEMBLE_RESULTS.md`](docs/ENSEMBLE_RESULTS.md).
+
 ## The app
 
 The app only reads precomputed files. Run `build_dataset.py --annotations official`, `train_registry.py` and `prepare_app_data.py` once, then:
