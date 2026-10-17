@@ -8,13 +8,21 @@ Method (research report, part A8):
   official dataset, so the label is exactly the official one (at least 50 % of the central
   2 s is seizure) and the predictions line up with the 12 classical models.
 - Normalization per recording and channel: (x - median) / (1.4826 · MAD), clipped at ±20.
-- Same 5 outer folds as the classical models. In each outer fold, 3 training recordings
-  (with seizures) are held out for early stopping and for choosing the threshold.
-- Real class proportions, weighted cross-entropy (seizure weight 8), AdamW + cosine schedule,
-  early stopping on validation average precision.
+- Same 5 outer folds as the classical models. In each outer fold, 5 training recordings
+  (with seizures) are held out for early stopping and for choosing the threshold — a first
+  run with only 3 gave a noisy, unstable signal (several folds "best epoch" was 1-2, and the
+  per-fold thresholds this chose were compressed near 0.9-0.99, the same symptom the
+  undersampled classical models showed).
+- Real class proportions, weighted cross-entropy (seizure weight 5; a first run at 8 pushed
+  probabilities too hard towards the extremes), AdamW + cosine schedule, early stopping on
+  validation average precision, never before epoch --min-epochs (5 by default) so training
+  does not lock onto a lucky noisy early checkpoint.
 - Optional online augmentation of BOTH classes: amplitude scaling, small noise, channel
-  dropout, left-right mirror, small time shift (the seizure share stays at about 4 %).
+  dropout, left-right mirror, small time shift (the seizure share stays at about 4 %). In the
+  first run this was the one change that reliably helped (event F1 +0.04 on ShallowConvNet).
 - Several seeds per fold; probabilities averaged.
+- Post-processing (smoothing + hysteresis) is not done here: it needs no retraining, so it is
+  applied afterwards, automatically, by scripts/evaluate_cnn.py.
 
 Outputs in /kaggle/working/cnn_outputs/ (or --out):
 - predictions/<name>.parquet: out-of-fold probability of every window (same format as
@@ -69,20 +77,21 @@ def arguments(argv=None):
     parser.add_argument("--augment", action="store_true", help="Online augmentation of both classes")
     parser.add_argument("--window-s", type=float, default=4.0, help="Input length in seconds, centred on each 2 s window")
     parser.add_argument("--epochs", type=int, default=40)
-    parser.add_argument("--patience", type=int, default=8)
+    parser.add_argument("--min-epochs", type=int, default=5, help="Early stopping cannot trigger before this epoch (avoids locking onto a lucky noisy early checkpoint)")
+    parser.add_argument("--patience", type=int, default=10)
     parser.add_argument("--batch", type=int, default=128)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--weight-decay", type=float, default=1e-2)
-    parser.add_argument("--seizure-weight", type=float, default=8.0)
+    parser.add_argument("--seizure-weight", type=float, default=5.0)
     parser.add_argument("--seeds", type=int, default=3)
-    parser.add_argument("--validation-recordings", type=int, default=3)
+    parser.add_argument("--validation-recordings", type=int, default=5)
     parser.add_argument("--folds", type=int, nargs="*", help="Outer folds to run (default: all)")
     parser.add_argument("--no-final", action="store_true", help="Skip the final model trained on all recordings")
     parser.add_argument("--quick", action="store_true", help="Tiny run to check that everything works")
     # parse_known_args: also works when run inside a notebook cell.
     args, _ = parser.parse_known_args(argv)
     if args.quick:
-        args.epochs, args.patience, args.seeds, args.folds = 2, 2, 1, [1]
+        args.epochs, args.min_epochs, args.patience, args.seeds, args.folds = 2, 1, 2, 1, [1]
     return args
 
 
@@ -296,7 +305,9 @@ def train(args, X, y, train_rows, valid_rows, seed: int, device, fixed_epochs: i
             record["validation_ap"] = float(score)
             if score > best["score"]:
                 best = {"score": float(score), "epoch": epoch, "state": copy.deepcopy(model.state_dict())}
-            elif epoch - best["epoch"] >= args.patience:
+            elif epoch >= args.min_epochs and epoch - best["epoch"] >= args.patience:
+                # min_epochs keeps training past a lucky noisy early peak (the validation set is
+                # only a handful of recordings) instead of locking onto it immediately.
                 history.append(record)
                 break
         history.append(record)

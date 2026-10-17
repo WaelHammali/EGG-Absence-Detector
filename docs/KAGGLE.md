@@ -64,31 +64,42 @@ All*), but a session still times out after 12 hours.
 
 ## 4. Bring the results back
 
-Download the zip from the notebook's *Output* tab, then:
+Download the zip from the notebook's *Output* tab, then unzip it under `outputs/kaggle/`. If
+this is not your first run (you tuned a hyperparameter and re-ran), unzip into a **new**
+subfolder instead of `cnn_outputs/` — the files inside are named only by architecture and
+augmentation (`cnn_shallow_plain.parquet`, ...), so a second run with the same `--arch` would
+silently overwrite the first one's files if unzipped to the same place:
 
 ```bash
 mkdir -p outputs/kaggle
-unzip ~/Downloads/cnn_outputs.zip -d outputs/kaggle/
+unzip ~/Downloads/cnn_outputs.zip -d outputs/kaggle/cnn_outputs        # first run
+unzip ~/Downloads/cnn_outputs.zip -d outputs/kaggle/cnn_outputs_v2     # a later, re-tuned run
 ```
 
-Each run writes, under `outputs/kaggle/`:
+Each run writes, under that folder:
 
 - `predictions/cnn_<arch>_<plain|augmented>.parquet` — out-of-fold probability of every
   window, same format as `outputs/predictions/<algo>_<mode>.parquet`;
-- `predictions/..._validation.parquet` — probabilities of the 3 held-out training recordings
+- `predictions/..._validation.parquet` — probabilities of the held-out training recordings
   per fold, used to choose each fold's threshold without ever looking at its test fold;
 - `models/..._fold<k>_seed<s>.pt` and `..._final.pt` (+ `.onnx` when export succeeds) — weights;
 - `..._config.json` / `..._history.json` — hyperparameters, fold thresholds, training curves.
 
-Then score them exactly like the other 12 models (nested threshold, SzCORE, added to
-`docs/NESTED_EVALUATION.md` and the app's Comparison page):
+Then score them exactly like the other 12 models (nested threshold, plain *and* smoothed with
+hysteresis, SzCORE):
 
 ```bash
-python scripts/evaluate_cnn.py
+python scripts/evaluate_cnn.py                           # reads outputs/kaggle/cnn_outputs by default
+python scripts/evaluate_cnn.py --dir outputs/kaggle/cnn_outputs_v2
 ```
 
-(`scripts/evaluate_cnn.py` is the next step — not written yet. Say the word when you have
-real Kaggle results to bring in, and that's what reads `outputs/kaggle/` and wires them in.)
+Writes `docs/DEEP_LEARNING_RESULTS.md` and `outputs/cnn_evaluation.csv`, comparing every CNN
+against the SVM baseline. Once you have predictions from both the CNN and the classical
+models, you can also blend them (no retraining):
+
+```bash
+python scripts/ensemble_predictions.py --models svm_unbalanced --extra outputs/kaggle/cnn_outputs/predictions/cnn_shallow_augmented.parquet
+```
 
 ## Keeping the notebook in sync
 

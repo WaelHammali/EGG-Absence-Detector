@@ -23,6 +23,13 @@ Trains deep models directly on the cleaned 19-channel EEG (no hand-made features
 with the project's 12 classical models (best so far: **SVM · unbalanced, event F1 0.894**,
 86/93 seizures found, 16 false alarms, threshold 0.82).
 
+**Second version of the recipe.** A first run's per-fold thresholds landed at 0.91–0.99 —
+probabilities compressed near 1, the same symptom the undersampled classical models showed —
+and several folds' "best epoch" was 1–2, a sign the 3-recording validation set was too small
+and noisy to trust. This version holds out 5 recordings instead of 3, lowers the seizure class
+weight from 8 to 5, and will not stop early before epoch 5. If you already have a first run's
+results, keep them — this one is for comparison, not a replacement.
+
 **Before running:** Notebook settings (right panel) → **Accelerator: GPU T4 x2** (or P100) →
 **Internet: off** (not needed, keeps the session reproducible) → **Add Input** → your private
 dataset `eeg-absence` (built by `scripts/export_kaggle.py` in the project repo).
