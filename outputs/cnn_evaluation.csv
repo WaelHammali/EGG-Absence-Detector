@@ -1,0 +1,11 @@
+name,label,event_f1,found,missed,false_alarms,false_alarms_per_hour,threshold,kind,window_ap,szcore_event_f1,szcore_sensitivity,szcore_fp_per_day,fold_thresholds
+svm_unbalanced,SVM · Unbalanced,0.894160399737546,86,7,16,1.8320610153529913,0.82,"optimistic (registry; nested evaluation of the classical models is separate, see docs/NESTED_EVALUATION.md)",,,,,
+cnn_eegnet_augmented,"EEGNet, augmented",0.7757986162225821,85,8,45,5.1526717557251915,,nested,0.6684827950828381,0.8345323741007195,0.8923076923076924,43.969465648854964,"{'1': 0.93, '2': 0.98, '3': 0.57, '4': 0.99, '5': 0.99}"
+cnn_eegnet_augmented,"EEGNet, augmented",0.8261474269819193,81,12,24,2.7480916030534353,0.99,optimistic,0.6684827950828381,,,,
+cnn_eegnet_augmented,"EEGNet, augmented",0.8109607277568227,85,8,32,3.6641221374045805,,nested_smoothed,0.6684827950828381,0.8405797101449275,0.8923076923076924,41.221374045801525,"{'1': 0.93, '2': 0.98, '3': 0.57, '4': 0.99, '5': 0.99}"
+cnn_shallow_augmented,"ShallowConvNet, augmented",0.8147133876890521,77,16,21,2.404580152671756,,nested,0.6716349120999738,0.8188976377952756,0.8,27.480916030534353,"{'1': 0.74, '2': 0.95, '3': 0.9, '4': 0.98, '5': 0.97}"
+cnn_shallow_augmented,"ShallowConvNet, augmented",0.8422971741112124,77,16,14,1.603053435114504,0.98,optimistic,0.6716349120999738,,,,
+cnn_shallow_augmented,"ShallowConvNet, augmented",0.8106082444508504,74,19,16,1.8320610687022902,,nested_smoothed,0.6716349120999738,0.7967479674796748,0.7538461538461538,24.732824427480917,"{'1': 0.74, '2': 0.95, '3': 0.9, '4': 0.98, '5': 0.97}"
+cnn_shallow_plain,"ShallowConvNet, plain",0.7739363216950503,79,14,35,4.00763358778626,,nested,0.6518899804236522,0.8088235294117647,0.8461538461538461,43.969465648854964,"{'1': 0.78, '2': 0.85, '3': 0.99, '4': 0.99, '5': 0.99}"
+cnn_shallow_plain,"ShallowConvNet, plain",0.8131508839912811,79,14,24,2.7480916030534353,0.98,optimistic,0.6518899804236522,,,,
+cnn_shallow_plain,"ShallowConvNet, plain",0.7808392821402361,76,17,26,2.9770992366412217,,nested_smoothed,0.6518899804236522,0.7938931297709924,0.8,38.4732824427481,"{'1': 0.78, '2': 0.85, '3': 0.99, '4': 0.99, '5': 0.99}"
