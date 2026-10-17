@@ -31,7 +31,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from src.detection import detect_all, event_metrics
+from src.detection import detect_all, detect_all_hysteresis, event_metrics, smooth_probabilities
 from evaluate_nested import szcore
 from train_registry import THRESHOLDS, best_threshold
 
@@ -72,6 +72,25 @@ def nested_score(predictions: pd.DataFrame, annotations: pd.DataFrame, fold_thre
     return event_metrics(matches, len(detected)), detected
 
 
+def smoothed_score(predictions: pd.DataFrame, annotations: pd.DataFrame, fold_thresholds: dict, window: int, gap: float) -> tuple[dict, pd.DataFrame]:
+    """Nested thresholds again, but on a smoothed probability with hysteresis instead of a hard
+    cut (research report, part A5): removes isolated one-window spikes without retraining, and
+    lets a confirmed event survive a brief dip instead of being cut into several false alarms.
+    Each fold keeps its own nested ``high`` threshold; ``low = high - gap``.
+    """
+    smoothed = smooth_probabilities(predictions, window=window)
+    detected_frames, match_frames = [], []
+    for fold_key, high in fold_thresholds.items():
+        subset = smoothed.loc[smoothed["fold"] == int(fold_key)]
+        low = max(THRESHOLDS[0], high - gap)
+        detected, matches = detect_all_hysteresis(subset, annotations, high, low)
+        detected_frames.append(detected)
+        match_frames.append(matches)
+    detected = pd.concat(detected_frames, ignore_index=True)
+    matches = pd.concat(match_frames, ignore_index=True)
+    return event_metrics(matches, len(detected)), detected
+
+
 def optimistic_score(predictions: pd.DataFrame, annotations: pd.DataFrame) -> tuple[dict, float, pd.DataFrame]:
     """One threshold chosen on all out-of-fold predictions (slightly optimistic, kept for reference)."""
     threshold = best_threshold(predictions, annotations)
@@ -93,6 +112,9 @@ def baseline_row(registry: dict) -> dict:
 def main() -> None:
     parser = ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--dir", default=str(DEFAULT_DIR), help="Unzipped Kaggle output folder (contains *_config.json and predictions/)")
+    parser.add_argument("--smooth-window", type=int, default=3, help="Moving-median window (odd number of windows) before hysteresis; 1 disables it")
+    parser.add_argument("--hysteresis-gap", type=float, default=0.3, help="low threshold = each fold's threshold minus this; an event survives a dip down to low")
+    parser.add_argument("--no-smooth", action="store_true", help="Skip the smoothed+hysteresis scoring entirely")
     args = parser.parse_args()
     directory = Path(args.dir)
     if not directory.exists():
@@ -114,19 +136,23 @@ def main() -> None:
         predictions = pd.read_parquet(predictions_path)
         nested, nested_detected = nested_score(predictions, annotations, config["fold_thresholds"])
         optimistic, threshold, _ = optimistic_score(predictions, annotations)
-        sz = szcore(nested_detected, annotations, durations)
         ap = average_precision_score(predictions["true_class"], predictions["proba"])
-        for kind, event, extra in (("nested", nested, {"threshold": None}), ("optimistic", optimistic, {"threshold": threshold})):
+        variants = [("nested", nested, nested_detected, {"threshold": None}), ("optimistic", optimistic, None, {"threshold": threshold})]
+        if not args.no_smooth:
+            smoothed, smoothed_detected = smoothed_score(predictions, annotations, config["fold_thresholds"], args.smooth_window, args.hysteresis_gap)
+            variants.append(("nested_smoothed", smoothed, smoothed_detected, {"threshold": None}))
+        for kind, event, detected, extra in variants:
+            sz = szcore(detected, annotations, durations) if detected is not None else None
             rows.append({
                 "name": name, "label": label(config), "event_f1": event["f1"], "found": event["tp"], "missed": event["fn"],
                 "false_alarms": event["fp"], "false_alarms_per_hour": event["fp"] / hours, "kind": kind,
-                "window_ap": float(ap), "szcore_event_f1": sz["event"]["f1"] if kind == "nested" else None,
-                "szcore_sensitivity": sz["event"]["sensitivity"] if kind == "nested" else None,
-                "szcore_fp_per_day": sz["event"]["fp_per_day"] if kind == "nested" else None,
-                "fold_thresholds": config["fold_thresholds"] if kind == "nested" else None, **extra,
+                "window_ap": float(ap), "szcore_event_f1": sz["event"]["f1"] if sz else None,
+                "szcore_sensitivity": sz["event"]["sensitivity"] if sz else None,
+                "szcore_fp_per_day": sz["event"]["fp_per_day"] if sz else None,
+                "fold_thresholds": config["fold_thresholds"] if kind.startswith("nested") else None, **extra,
             })
-        print(f"{name} ({label(config)}): nested event F1 {nested['f1']:.3f} (found {nested['tp']}/{nested['tp'] + nested['fn']}, "
-              f"false alarms {nested['fp']}); SzCORE event F1 {sz['event']['f1']:.3f}; window AP {ap:.3f}", flush=True)
+            print(f"{name} ({label(config)}) [{kind}]: event F1 {event['f1']:.3f} (found {event['tp']}/{event['tp'] + event['fn']}, "
+                  f"false alarms {event['fp']})" + (f"; SzCORE event F1 {sz['event']['f1']:.3f}" if sz else "") + (f"; window AP {ap:.3f}" if kind == "nested" else ""), flush=True)
 
     table = pd.DataFrame(rows)
     table.to_csv(TABLE, index=False)
@@ -136,9 +162,20 @@ def main() -> None:
 
 def write_report(table: pd.DataFrame) -> None:
     baseline = table.iloc[0]
-    nested = table.loc[table["kind"] == "nested"].sort_values("event_f1", ascending=False)
+    nested = table.loc[table["kind"] == "nested"].set_index("name")
+    smoothed = table.loc[table["kind"] == "nested_smoothed"].set_index("name")
     optimistic = table.loc[table["kind"] == "optimistic"].set_index("name")
-    best = nested.iloc[0] if len(nested) else None
+    has_smoothed = len(smoothed) > 0
+
+    # "Effective" = whichever of plain / smoothed+hysteresis nested scoring is better for that
+    # model; this is what the headline table and the verdict are ranked on.
+    effective = {}
+    for name in nested.index:
+        candidates = [("plain", nested.loc[name])] + ([("smoothed", smoothed.loc[name])] if has_smoothed and name in smoothed.index else [])
+        effective[name] = max(candidates, key=lambda item: item[1]["event_f1"])
+    order = sorted(effective, key=lambda name: effective[name][1]["event_f1"], reverse=True)
+    best = effective[order[0]][1] if order else None
+    best_kind = effective[order[0]][0] if order else None
 
     lines = [
         "# Deep learning results (Kaggle)",
@@ -148,6 +185,14 @@ def write_report(table: pd.DataFrame) -> None:
         "",
         "- **Nested threshold** (main number): each of the 5 outer folds (same `GroupKFold` as every other model here) is scored with its own threshold, "
         "chosen only on 3 training recordings held out from that fold and never seen by the test fold. This is the fair number to compare with the SVM.",
+    ]
+    if has_smoothed:
+        lines.append(
+            "- **Smoothed**: the same nested thresholds, but the probability is smoothed first (moving median) and an event, once started at the "
+            "threshold, survives a dip down to threshold − 0.3 instead of being cut into several false alarms (research report, part A5; "
+            "`src/detection.py`: `smooth_probabilities`, `windows_to_intervals_hysteresis`). Pure post-processing, no retraining."
+        )
+    lines += [
         "- **Optimistic threshold**: one threshold chosen on all out-of-fold predictions at once, kept only for reference (this is how the classical "
         "models' registry numbers below are computed too, pending their own nested re-evaluation — see `docs/NESTED_EVALUATION.md`).",
         "- **SzCORE**: event scoring from the [SzCORE framework](https://pypi.org/project/timescoring/) (30 s / 60 s tolerance, events closer than 90 s merged), "
@@ -156,17 +201,34 @@ def write_report(table: pd.DataFrame) -> None:
         "",
         "## Results",
         "",
-        f"| Model | Event F1 (nested) | Found (of 93) | False alarms | FA / hour | SzCORE event F1 | SzCORE sensitivity | Window AP |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|",
+        "Best of plain / smoothed nested scoring per model (bold marks which one won):",
+        "",
+        f"| Model | Event F1 | Found (of 93) | False alarms | FA / hour | SzCORE event F1 | Window AP |",
+        "|---|---:|---:|---:|---:|---:|---:|",
         f"| **{baseline['label']}** (classical baseline) | **{baseline['event_f1']:.3f}** | {baseline['found']} | {baseline['false_alarms']} | "
-        f"{baseline['false_alarms_per_hour']:.1f} | — | — | — |",
+        f"{baseline['false_alarms_per_hour']:.1f} | — | — |",
     ]
-    for _, row in nested.iterrows():
-        mark = "**" if best is not None and row["name"] == best["name"] else ""
+    for name in order:
+        kind, row = effective[name]
+        mark = "**" if name == order[0] else ""
+        tag = " *(smoothed)*" if kind == "smoothed" else ""
         lines.append(
-            f"| {mark}{row['label']}{mark} | {mark}{row['event_f1']:.3f}{mark} | {row['found']} | {row['false_alarms']} | "
-            f"{row['false_alarms_per_hour']:.1f} | {row['szcore_event_f1']:.3f} | {row['szcore_sensitivity']:.3f} | {row['window_ap']:.3f} |"
+            f"| {mark}{row['label']}{tag}{mark} | {mark}{row['event_f1']:.3f}{mark} | {row['found']} | {row['false_alarms']} | "
+            f"{row['false_alarms_per_hour']:.1f} | {row['szcore_event_f1']:.3f} | {row['window_ap']:.3f} |"
         )
+    if has_smoothed:
+        lines += [
+            "",
+            "Plain vs. smoothed, each model (same fold thresholds, only the post-processing differs):",
+            "",
+            "| Model | Event F1 plain | Event F1 smoothed | Δ |",
+            "|---|---:|---:|---:|",
+        ]
+        for name in nested.index:
+            plain_f1 = nested.loc[name, "event_f1"]
+            if name in smoothed.index:
+                smooth_f1 = smoothed.loc[name, "event_f1"]
+                lines.append(f"| {nested.loc[name, 'label']} | {plain_f1:.3f} | {smooth_f1:.3f} | {smooth_f1 - plain_f1:+.3f} |")
     lines += [
         "",
         "Optimistic threshold, for reference (not the number to compare with the SVM):",
@@ -199,8 +261,10 @@ def write_report(table: pd.DataFrame) -> None:
                 f"({baseline['event_f1']:.3f}) by {-gap:.3f} under the nested threshold. Check this is not noise "
                 "(re-run with different seeds) before reporting it as a clear win."
             )
+        if best_kind == "smoothed":
+            verdict += " Its winning score is the *smoothed* one — plain thresholding alone did worse (see the plain vs. smoothed table above)."
         lines.append(f"- {verdict}")
-        drop = [(row["label"], row["event_f1"] - optimistic.loc[row["name"], "event_f1"]) for _, row in nested.iterrows()]
+        drop = [(row["label"], row["event_f1"] - optimistic.loc[name, "event_f1"]) for name, row in nested.iterrows()]
         lines.append(
             "- **Optimism of the CNNs' own threshold choice** (nested − optimistic event F1): "
             + ", ".join(f"{label} {value:+.3f}" for label, value in drop)

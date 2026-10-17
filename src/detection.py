@@ -62,6 +62,84 @@ def windows_to_intervals(
     return pd.DataFrame(rows, columns=INTERVAL_COLUMNS)
 
 
+def smooth_probabilities(table: pd.DataFrame, window: int = 3) -> pd.DataFrame:
+    """Centred moving median of each recording's probability, ordered by ``start_s``.
+
+    Removes isolated one-window spikes (noise) without retraining the model, at the cost of
+    slightly blurring real onsets and offsets. ``window`` must be odd; 1 leaves ``proba``
+    unchanged. Research report, part A5.
+    """
+    if window <= 1:
+        return table
+    parts = []
+    for _, group in table.groupby("recording", sort=False):
+        ordered = group.sort_values("start_s")
+        parts.append(ordered.assign(proba=ordered["proba"].rolling(window, center=True, min_periods=1).median()))
+    return pd.concat(parts).loc[table.index]
+
+
+def windows_to_intervals_hysteresis(
+    start_s: np.ndarray,
+    end_s: np.ndarray,
+    proba: np.ndarray,
+    high: float,
+    low: float,
+    min_gap_s: float = MIN_GAP_S,
+    min_duration_s: float = MIN_DURATION_S,
+) -> pd.DataFrame:
+    """Like :func:`windows_to_intervals`, but an event needs ``proba >= high`` to start and only
+    ``proba >= low`` to continue (``low <= high``; ``low == high`` is the plain single threshold).
+    Research report, part A5: lets a confirmed event survive a few weak windows without lowering
+    the bar for starting a new one, so isolated noise stays rejected.
+    """
+    start_s = np.asarray(start_s, dtype=float)
+    end_s = np.asarray(end_s, dtype=float)
+    proba = np.asarray(proba, dtype=float)
+    order = np.argsort(start_s, kind="stable")
+    start_s, end_s, proba = start_s[order], end_s[order], proba[order]
+    positive = np.zeros(len(proba), dtype=bool)
+    active = False
+    for index, value in enumerate(proba):
+        active = value >= high if not active else value >= low
+        positive[index] = active
+    # Same run-finding, merging and max/mean-proba bookkeeping as windows_to_intervals, but
+    # driven by the hysteresis ``positive`` mask instead of a plain threshold comparison, so
+    # max_proba / mean_proba stay the real probabilities, not the binarized signal.
+    runs = np.flatnonzero(positive)
+    if not len(runs):
+        return pd.DataFrame(columns=INTERVAL_COLUMNS)
+    breaks = np.flatnonzero(np.diff(runs) > 1)
+    segments = [[int(first), int(last)] for first, last in zip(runs[np.r_[0, breaks + 1]], runs[np.r_[breaks, len(runs) - 1]])]
+    merged = [segments[0]]
+    for first, last in segments[1:]:
+        if start_s[first] - end_s[merged[-1][1]] < min_gap_s:
+            merged[-1][1] = last
+        else:
+            merged.append([first, last])
+    rows = []
+    for first, last in merged:
+        duration = end_s[last] - start_s[first]
+        if duration < min_duration_s:
+            continue
+        inside = proba[first : last + 1]
+        rows.append({"start_s": start_s[first], "end_s": end_s[last], "duration_s": duration, "max_proba": float(inside.max()), "mean_proba": float(inside.mean())})
+    return pd.DataFrame(rows, columns=INTERVAL_COLUMNS)
+
+
+def detect_all_hysteresis(predictions: pd.DataFrame, annotations: pd.DataFrame, high: float, low: float) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """:func:`detect_all` with :func:`windows_to_intervals_hysteresis` instead of a single threshold."""
+    detected_frames, match_frames = [], []
+    for recording, group in predictions.groupby("recording", sort=True):
+        detected = windows_to_intervals_hysteresis(group["start_s"], group["end_s"], group["proba"], high, low)
+        real = annotations.loc[annotations["recording"] == recording, ["start_s", "end_s"]]
+        matches = match_events(detected, real)
+        detected.insert(0, "recording", recording)
+        matches.insert(0, "recording", recording)
+        detected_frames.append(detected)
+        match_frames.append(matches)
+    return pd.concat(detected_frames, ignore_index=True), pd.concat(match_frames, ignore_index=True)
+
+
 def match_events(detected: pd.DataFrame, real: pd.DataFrame) -> pd.DataFrame:
     """Event-level comparison for one recording.
 
