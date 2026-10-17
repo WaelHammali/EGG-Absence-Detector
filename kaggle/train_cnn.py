@@ -24,6 +24,18 @@ Method (research report, part A8):
 - Post-processing (smoothing + hysteresis) is not done here: it needs no retraining, so it is
   applied afterwards, automatically, by scripts/evaluate_cnn.py.
 
+Bug fixed in this version: ``event_counts`` (used for every threshold choice and score) used
+to index back into the table with the pandas index *labels* returned by
+``groupby(...).groups``, which only happen to equal row positions when the table's index is
+untouched 0..len(table)-1. That is false for the held-out validation predictions
+(``windows.iloc[valid_rows]``, which keeps the original row numbers), so it crashed with
+``IndexError: index 7943 is out of bounds for axis 0 with size 4344`` the first time a chosen
+validation recording's original row number happened to exceed the validation subset's own
+size — which earlier runs avoided only by luck of which recordings were randomly picked. Now
+uses a boolean mask on arrays taken directly from the table, which is always correct
+regardless of its index. Verified to reproduce the exact same numbers as before everywhere
+the old code happened to work, and to no longer crash where it did.
+
 Outputs in /kaggle/working/cnn_outputs/ (or --out):
 - predictions/<name>.parquet: out-of-fold probability of every window (same format as
   outputs/predictions/*.parquet of the project);
@@ -227,12 +239,24 @@ def intervals(start: np.ndarray, end: np.ndarray, positive: np.ndarray) -> list[
 
 
 def event_counts(table: pd.DataFrame, annotations: pd.DataFrame, threshold) -> dict:
-    """Found / missed seizures and false alarms; ``threshold`` is a number or a per-row array."""
+    """Found / missed seizures and false alarms; ``threshold`` is a number or a per-row array
+    (already aligned with ``table``'s row order).
+
+    Uses boolean masks over arrays pulled once from ``table``, never the DataFrame's own index
+    (fixed bug: the previous version used ``groupby(...).groups``, whose keys are *index
+    labels*, as positions into ``.to_numpy()`` — correct only when ``table``'s index happens to
+    already be 0..len(table)-1, which is false for any ``.iloc[...]``-sliced subset such as the
+    held-out validation predictions, e.g. ``IndexError: index 7943 is out of bounds for axis 0
+    with size 4344``).
+    """
     positive = table["proba"].to_numpy() >= threshold
+    recordings = table["recording"].to_numpy()
+    start_values = table["start_s"].to_numpy()
+    end_values = table["end_s"].to_numpy()
     tp = fn = fp = detections = 0
-    for recording, rows in table.groupby("recording").groups.items():
-        rows = np.asarray(rows)
-        detected = intervals(table["start_s"].to_numpy()[rows], table["end_s"].to_numpy()[rows], positive[rows])
+    for recording in pd.unique(recordings):
+        mask = recordings == recording
+        detected = intervals(start_values[mask], end_values[mask], positive[mask])
         real = annotations.loc[annotations["recording"] == recording, ["start_s", "end_s"]].to_numpy()
         used = np.zeros(len(detected), dtype=bool)
         for s, e in real:
@@ -297,7 +321,7 @@ def train(args, X, y, train_rows, valid_rows, seed: int, device, fixed_epochs: i
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
-            total += float(loss) * len(rows)
+            total += loss.detach().item() * len(rows)
         scheduler.step()
         record = {"epoch": epoch, "loss": total / len(order)}
         if fixed_epochs is None:
