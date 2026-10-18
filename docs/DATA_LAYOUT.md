@@ -20,9 +20,11 @@ data/
     │   ├── official_8ch/                  archive: filtered, 8 channels, 144 features
     │   ├── provisional_8ch/               archive: first build (inferred offsets), 8 channels, unfiltered
     │   ├── augmented_shift_mirror/        extra seizure windows only (shifts + left-right mirror)
-    │   ├── augmented_both_classes/        planned: augmentation of both classes (research report, part B)
-    │   ├── deep_learning_4s/              planned: 4 s normalized windows for the CNN (research report, part A8)
-    │   └── hard_negatives/                planned: high-scoring normal windows (research report, part B3)
+    │   ├── augmented_amplitude/           extra seizure windows only (random amplitude scaling)
+    │   ├── augmented_noise/               extra seizure windows only (Gaussian noise)
+    │   ├── augmented_time_mask/           extra seizure windows only (a random time span zeroed)
+    │   ├── augmented_channel_dropout/     extra seizure windows only (1-3 channels zeroed); the best augmentation method
+    │   └── augmented_combined/            extra seizure windows only (noise + channel dropout merged)
     └── app/                               precomputed files read by app.py (signals, references, curves)
 ```
 
@@ -34,7 +36,9 @@ data/
 | `official_raw` | 31,419 | 1,244 | 19 | none | 320 | `build_dataset.py --annotations official --preprocess none --skip-conversion` | Part VII comparison |
 | `official_8ch` | 31,419 | 1,244 | 8 | 0.5–40 Hz | 144 | earlier version of the code | 8 vs 19 channels report |
 | `provisional_8ch` | 30,174 | 3.82 % | 8 | none | 144 | earlier version of the code | Parts I–VI provisional report |
-| `augmented_shift_mirror` | +8,230 (seizure only) | 100 % | 19 | 0.5–40 Hz | 320 | `build_augmented.py` | the 4 `augmented` models |
+| `augmented_shift_mirror` | +8,230 (seizure only) | 100 % | 19 | 0.5–40 Hz | 320 | `build_augmented.py` | the `augmented` models |
+| `augmented_amplitude` / `_noise` / `_time_mask` / `_channel_dropout` | +1,244 each (seizure only) | 100 % | 19 | 0.5–40 Hz | 320 | `build_augmented.py --method <name>` | the matching `augmented_<name>` models |
+| `augmented_combined` | +2,488 (seizure only) | 100 % | 19 | 0.5–40 Hz | 320 | `build_augmented.py --method combined --include noise channel_dropout` | the `augmented_combined` models |
 
 `official_8ch` and `provisional_8ch` are archives: no current script writes to them. A new provisional build (`build_dataset.py --annotations provisional`) goes to `recordings/provisional/` and `datasets/provisional/`, so the archives are never overwritten.
 
@@ -46,4 +50,4 @@ data/
 
 ## Models and predictions
 
-Models are named after their training mode: `models/<algo>_<mode>.joblib` and `outputs/predictions/<algo>_<mode>.parquet`, listed in `models/registry.json`, with `<algo>` = dt, rf, knn, svm and `<mode>` = unbalanced, balanced, augmented. All modes are tested on the `official` dataset; only the training folds differ.
+Models are named after their training mode: `models/<algo>_<mode>.joblib` and `outputs/predictions/<algo>_<mode>.parquet`, listed in `models/registry.json`, with `<algo>` = dt, rf, knn, svm and `<mode>` = unbalanced, balanced, augmented, augmented_amplitude, augmented_noise, augmented_time_mask, augmented_channel_dropout, or augmented_combined. All modes are tested on the `official` dataset; only the training folds differ.

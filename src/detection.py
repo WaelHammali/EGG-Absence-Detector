@@ -67,7 +67,7 @@ def smooth_probabilities(table: pd.DataFrame, window: int = 3) -> pd.DataFrame:
 
     Removes isolated one-window spikes (noise) without retraining the model, at the cost of
     slightly blurring real onsets and offsets. ``window`` must be odd; 1 leaves ``proba``
-    unchanged. Research report, part A5.
+    unchanged.
     """
     if window <= 1:
         return table
@@ -89,8 +89,8 @@ def windows_to_intervals_hysteresis(
 ) -> pd.DataFrame:
     """Like :func:`windows_to_intervals`, but an event needs ``proba >= high`` to start and only
     ``proba >= low`` to continue (``low <= high``; ``low == high`` is the plain single threshold).
-    Research report, part A5: lets a confirmed event survive a few weak windows without lowering
-    the bar for starting a new one, so isolated noise stays rejected.
+    Lets a confirmed event survive a few weak windows without lowering the bar for starting a
+    new one, so isolated noise stays rejected.
     """
     start_s = np.asarray(start_s, dtype=float)
     end_s = np.asarray(end_s, dtype=float)

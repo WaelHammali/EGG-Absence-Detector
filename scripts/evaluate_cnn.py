@@ -80,8 +80,8 @@ def nested_score(predictions: pd.DataFrame, annotations: pd.DataFrame, fold_thre
 
 def smoothed_score(predictions: pd.DataFrame, annotations: pd.DataFrame, fold_thresholds: dict, window: int, gap: float) -> tuple[dict, pd.DataFrame]:
     """Nested thresholds again, but on a smoothed probability with hysteresis instead of a hard
-    cut (research report, part A5): removes isolated one-window spikes without retraining, and
-    lets a confirmed event survive a brief dip instead of being cut into several false alarms.
+    cut: removes isolated one-window spikes without retraining, and lets a confirmed event
+    survive a brief dip instead of being cut into several false alarms.
     Each fold keeps its own nested ``high`` threshold; ``low = high - gap``.
     """
     smoothed = smooth_probabilities(predictions, window=window)
@@ -190,8 +190,8 @@ def write_report(table: pd.DataFrame) -> None:
     if has_smoothed:
         lines.append(
             "- **Smoothed**: the same nested thresholds, but the probability is smoothed first (moving median) and an event, once started at the "
-            "threshold, survives a dip down to threshold − 0.3 instead of being cut into several false alarms (research report, part A5; "
-            "`src/detection.py`: `smooth_probabilities`, `windows_to_intervals_hysteresis`). Pure post-processing, no retraining."
+            "threshold, survives a dip down to threshold − 0.3 instead of being cut into several false alarms "
+            "(`src/detection.py`: `smooth_probabilities`, `windows_to_intervals_hysteresis`). Pure post-processing, no retraining."
         )
     lines += [
         "- **Optimistic threshold**: one threshold chosen on all out-of-fold predictions at once, kept only for reference (this is how the classical "
@@ -247,9 +247,9 @@ def write_report(table: pd.DataFrame) -> None:
         if gap > 0.01:
             verdict = (
                 f"The best CNN ({best['label']}, event F1 {best['event_f1']:.3f}) does not beat the SVM baseline "
-                f"({baseline['event_f1']:.3f}), a gap of {gap:.3f}. This matches the research report's expectation: "
-                "with 93 seizures in 21 patients, raw-signal deep learning is unlikely to beat hand-made amplitude and "
-                "band-power features on a pattern as regular as the 3 Hz absence rhythm."
+                f"({baseline['event_f1']:.3f}), a gap of {gap:.3f}. This is the expected outcome: with 93 seizures in "
+                "21 patients, raw-signal deep learning is unlikely to beat hand-made amplitude and band-power features "
+                "on a pattern as regular as the 3 Hz absence rhythm."
             )
         elif gap > -0.01:
             verdict = (

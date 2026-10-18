@@ -4,7 +4,7 @@ Self-contained: needs only numpy, pandas, pyarrow, scikit-learn and PyTorch, so 
 to any GPU machine. Input: the folder written by scripts/export_cnn_data.py. It also holds the
 model definitions (ShallowConvNet, EEGNet) needed to load the weights in models/cnn/.
 
-Method (research report, part A8):
+Method:
 - Input: 4 s of the 19 filtered channels (1,024 samples) centred on each 2 s window of the
   official dataset, so the label is exactly the official one (at least 50 % of the central
   2 s is seizure) and the predictions line up with the 12 classical models.

@@ -26,13 +26,17 @@ def main() -> None:
     parser = ArgumentParser(description=__doc__)
     parser.add_argument("--recording", required=True, help="Recording ID, e.g. 190304A_E")
     parser.add_argument("--algo", choices=["dt", "rf", "knn", "svm"], help="Algorithm (default: the registry's default model)")
-    parser.add_argument("--mode", choices=["unbalanced", "balanced", "augmented"], help="Training mode (default: the registry's default model)")
+    parser.add_argument(
+        "--mode",
+        choices=["unbalanced", "balanced", "augmented", "augmented_amplitude", "augmented_noise", "augmented_time_mask", "augmented_channel_dropout", "augmented_combined"],
+        help="Training mode (default: the registry's default model)",
+    )
     parser.add_argument("--threshold", type=float, help="Probability threshold (default: the model's best event-F1 threshold)")
     args = parser.parse_args()
     if not REGISTRY.exists():
         sys.exit(f"Missing {REGISTRY.relative_to(ROOT)}: run `python scripts/train_registry.py` first.")
     registry = json.loads(REGISTRY.read_text())
-    default_algo, default_mode = registry["default_model"].split("_")
+    default_algo, default_mode = registry["default_model"].split("_", 1)
     key = f"{args.algo or default_algo}_{args.mode or default_mode}"
     entry = registry["models"][key]
     predictions = pd.read_parquet(ROOT / entry["predictions"])
@@ -51,7 +55,13 @@ def main() -> None:
     metrics = event_metrics(matches, len(detected))
     false_starts = set(matches.loc[matches["status"] == "FP", "detected_start_s"])
 
-    mode = {"unbalanced": "non équilibré", "balanced": "équilibré", "augmented": "augmenté"}[entry["mode"]]
+    mode_labels = {
+        "unbalanced": "non équilibré", "balanced": "équilibré", "augmented": "augmenté",
+        "augmented_amplitude": "augmenté (amplitude)", "augmented_noise": "augmenté (bruit)",
+        "augmented_time_mask": "augmenté (masque temporel)", "augmented_channel_dropout": "augmenté (canaux coupés)",
+        "augmented_combined": "augmenté (combiné)",
+    }
+    mode = mode_labels.get(entry["mode"], entry["mode"])
     print(f"Enregistrement {args.recording} — {entry['algorithm_name']}, entraînement {mode} — seuil {threshold:.2f} (probabilités hors-pli)")
     print()
     if detected.empty:

@@ -2,7 +2,9 @@
 
 Automatic detection of absence seizures in EEG recordings, built for a university data-mining project.
 
-The pipeline reads the MATLAB recordings, aligns the neurologist's annotations, filters the signal, cuts it into 2 s windows and describes each window with 320 features. Four algorithms (Decision Tree, Random Forest, KNN, SVM) are trained in three ways of handling the class imbalance, then evaluated on patients they never saw. A Dash app shows the signals, the predictions of each model and the comparison of the 12 models.
+The pipeline reads the MATLAB recordings, aligns the neurologist's annotations, filters the signal, cuts it into 2 s windows and describes each window with 320 features. Four algorithms (Decision Tree, Random Forest, KNN, SVM) are trained several ways of handling the class imbalance and several data-augmentation methods, then evaluated on patients they never saw. Two compact CNNs (ShallowConvNet, EEGNet) are trained directly on the raw signal for comparison. A Dash app shows the signals, the predictions of each model and the comparison across all of them.
+
+The full write-up, from the raw data to the final results, is in [`report/main.pdf`](report/main.pdf) (LaTeX source in [`report/`](report)).
 
 ## Results at a glance
 
@@ -12,20 +14,22 @@ The pipeline reads the MATLAB recordings, aligns the neurologist's annotations, 
 | Annotated seizures | 93 |
 | Windows | 31,419, of which 1,244 are seizure windows (3.96 %) |
 | Features per window | 320 |
-| Models | 4 algorithms × 3 training modes = 12 |
-| Best single model | **SVM, unbalanced**: event F1 0.894, 86 of 93 seizures found, 16 false alarms (1.8 per hour), threshold 0.82 |
-| Best blend | **SVM + ShallowConvNet**: event F1 0.901, 90 of 93 found, 19 false alarms, threshold chosen on the other folds only |
+| Classical models | 4 algorithms × 8 training modes = 32 |
+| CNN runs | 2 architectures × up to 8 augmentation transforms = 12 |
+| **Best overall** | **SVM, channel-dropout augmentation**: event F1 0.901, 88 of 93 seizures found, 18 false alarms, threshold 0.90 |
+| Original baseline | SVM, unbalanced: event F1 0.894, 86 of 93 found, 16 false alarms, threshold 0.82 |
+| Best CNN | ShallowConvNet, amplitude-scaling augmentation: event F1 0.817 (nested threshold) — does not beat the classical models |
 
-Event F1 at each model's best threshold (scores on unseen patients):
+Event F1 at each model's best threshold (original 3-mode comparison; scores on unseen patients):
 
-| Algorithm | Unbalanced | Balanced | Augmented |
+| Algorithm | Unbalanced | Balanced | Augmented (shift+mirror) |
 |---|---:|---:|---:|
 | SVM | **0.894** | 0.821 | 0.862 |
 | Random Forest | **0.867** | 0.785 | 0.854 |
 | KNN | **0.828** | 0.519 | 0.692 |
 | Decision Tree | **0.290** | 0.148 | 0.171 |
 
-Training on the real proportions and choosing the threshold gives the best result for every algorithm. Undersampling throws away most of the normal windows, and augmentation repeats the same 93 seizures; in both cases the models predict seizures too often on real data. The full analysis (in French) is in [`docs/MODEL_COMPARISON.md`](docs/MODEL_COMPARISON.md).
+Training on the real proportions and choosing the threshold gives the best result for every algorithm among these three original modes; undersampling and the first augmentation attempt (shift+mirror) both predict seizures too often on real data. A wider search over five more augmentation methods, tested individually, found two that do help — channel dropout and noise — with channel dropout alone producing the best result in the whole project (table above). The full analysis is in [`report/main.pdf`](report/main.pdf) and [`docs/MODEL_COMPARISON.md`](docs/MODEL_COMPARISON.md) (original 12-model comparison, in French; `outputs/augmentation_methods_comparison.csv` has the raw numbers for every augmentation method tried).
 
 ## Method
 
@@ -54,19 +58,21 @@ With the average of each feature over the channels: 16 × (19 + 1) = 320 feature
 
 ### 5. Training modes
 
-The three modes change only the training data. Test data always keeps the real windows and the real 4 %.
+Eight modes change only the training data; test data always keeps the real windows and the real 4 %.
 
 | Mode | Training data of a fold | Seizure share |
 |---|---|---:|
 | Unbalanced | All training windows, as recorded (about 25,100) | 4 % |
 | Balanced | All seizure windows + as many normal windows drawn at random (random undersampling, about 2,000 windows). Repeated with 5 seeds (0–4); seed 0 is saved. | 50 % |
-| Augmented | All training windows + extra seizure windows of the training recordings (about 31,700) | 24 % |
+| Augmented (shift+mirror) | All training windows + extra seizure windows of the training recordings (about 31,700) | 24 % |
+| Augmented (amplitude / noise / time mask / channel dropout) | All training windows + one transformed copy of every real seizure window (about 26,100 each) | 8 % |
+| Augmented (combined) | All training windows + the noise and channel-dropout copies together | 11 % |
 
-The augmented windows are cut again from the filtered signal, never invented:
+The shift+mirror windows are cut again from the filtered signal, never invented:
 - **Shifted windows**: windows starting 0.25, 0.5 and 0.75 s after the regular ones, kept only if at least 50 % of the window is seizure (3,493 windows).
 - **Left-right mirror** of every seizure window, original and shifted: Fp1↔Fp2, F7↔F8, F3↔F4, T3↔T4, C3↔C4, T5↔T6, P3↔P4, O1↔O2; Fz, Cz and Pz stay in place (1,244 + 3,493 windows). This is valid because absence seizures are generalised, so they appear on both sides of the head.
 
-That makes 8,230 added windows, stored apart in `data/processed/datasets/augmented_shift_mirror/`; the official dataset is not changed. A build check confirms that the regular windows reproduce the official dataset exactly.
+That makes 8,230 added windows, stored in `data/processed/datasets/augmented_shift_mirror/`. The four newer methods each add one transformed copy of every real seizure window (1,244 windows each): amplitude scaling (random ×0.6–1.6 gain), Gaussian noise, time masking (a random short span zeroed) and channel dropout (1–3 random channels zeroed). Only channel dropout and noise actually improve results (see Results above); the combined mode merges those two. None of this changes the official dataset, and a build check confirms the regular windows reproduce it exactly. Full method-by-method numbers: `outputs/augmentation_methods_comparison.csv`, or `report/main.pdf` (Chapter 5).
 
 ### 6. Validation
 
@@ -86,7 +92,7 @@ For each model, the threshold is the one between 0.05 and 0.99 that gives the hi
 
 ## Data layout
 
-Each recording set and each dataset has its own folder under `data/processed/` (`recordings/<set>/`, `datasets/<name>/`), with a README in each. The main dataset is `datasets/official/`; the augmented windows are in `datasets/augmented_shift_mirror/`; folders are ready for the methods planned in the research report (`augmented_both_classes/`, `deep_learning_4s/`, `hard_negatives/`). All paths are defined in [`src/paths.py`](src/paths.py); details in [`docs/DATA_LAYOUT.md`](docs/DATA_LAYOUT.md).
+Each recording set and each dataset has its own folder under `data/processed/` (`recordings/<set>/`, `datasets/<name>/`), with a README in each. The main dataset is `datasets/official/`; the augmented windows are in `datasets/augmented_shift_mirror/`, `datasets/augmented_amplitude/`, `datasets/augmented_noise/`, `datasets/augmented_time_mask/`, `datasets/augmented_channel_dropout/` and `datasets/augmented_combined/`. All paths are defined in [`src/paths.py`](src/paths.py); details in [`docs/DATA_LAYOUT.md`](docs/DATA_LAYOUT.md).
 
 ## Setup
 
@@ -122,49 +128,63 @@ python scripts/train_models.py                                               # d
 
 `--skip-conversion` reuses the labeled per-recording Parquet files after checking their labels against the current annotations. The provisional dataset (inferred offsets) is still built with `python scripts/build_dataset.py --annotations provisional`.
 
-### Detection and the 12 models (Parts X–XI)
+### Detection and the classical models (Parts X–XI)
 
 ```bash
 python scripts/predict_oof.py          # Part X: out-of-fold Random Forest predictions, models/rf_final.joblib
-python scripts/build_augmented.py      # 8,230 extra seizure windows for the augmented mode, in their own file
-python scripts/train_registry.py       # 12 models = DT, RF, KNN, SVM × unbalanced, balanced, augmented (about 1 hour)
+python scripts/build_augmented.py      # shift+mirror (default); --method amplitude|noise|time_mask|channel_dropout for the others
+python scripts/train_registry.py       # the 3 original modes by default (about 1 hour); --modes <name> [<name> ...] to add more
+python scripts/compare_augmentation_methods.py  # table of every augmentation method against each algorithm's baseline
 python scripts/prepare_app_data.py     # filtered signals, reference channels, metadata, technician events, comparison curves
 python scripts/evaluate_detection.py   # Part X–XI: threshold, outputs/detected_intervals.csv, figures, docs/PARTS_X_XI.md
-python scripts/compare_models.py       # docs/MODEL_COMPARISON.md
-python scripts/evaluate_nested.py      # optional, slow: nested threshold + SzCORE scoring of the 12 models → docs/NESTED_EVALUATION.md
+python scripts/compare_models.py       # docs/MODEL_COMPARISON.md (the original 12-model comparison)
+python scripts/evaluate_nested.py      # slow, memory-heavy: nested threshold + SzCORE scoring, one model per run (see note below)
 ```
 
 `train_registry.py` writes:
 - `outputs/predictions/<algo>_<mode>.parquet`: out-of-fold probabilities;
-- `models/<algo>_<mode>.joblib`: final models trained on all 21 recordings;
+- `models/<algo>_<mode>.joblib`: final models trained on all 21 recordings (not committed; rebuild locally, a few minutes to an hour depending on the mode);
 - `models/registry.json`: features, best threshold, scores and training class distribution of every model, and the default model (best event F1).
 
-`--modes augmented` (or any list of modes) retrains only those modes and keeps the other models of the registry.
+Default run trains the 3 original modes (unbalanced, balanced, augmented). The 5 newer modes
+(`augmented_amplitude`, `augmented_noise`, `augmented_time_mask`, `augmented_channel_dropout`,
+`augmented_combined`) are opt-in: build the dataset first with `build_augmented.py --method
+<name>`, then `train_registry.py --modes <mode_name>`. `evaluate_nested.py`'s fully fair,
+nested-threshold re-scoring is only finished for 3 models so far (cached in `outputs/nested/`,
+git-ignored) — it has not been run for the new best model yet; this is listed as future work in
+`report/main.pdf`.
 
 ### Detection from the terminal
 
 ```bash
-python scripts/detect.py --recording 190304A_E [--algo dt|rf|knn|svm] [--mode unbalanced|balanced|augmented] [--threshold 0.5]
+python scripts/detect.py --recording 190304A_E [--algo dt|rf|knn|svm] [--mode <mode>] [--threshold 0.5]
 ```
 
-Without `--algo` and `--mode`, the default model is used.
+`--mode` accepts any of the 8 training modes (see above); without `--algo` and `--mode`, the
+registry's default model is used.
 
 ### Deep learning models
 
 Compact CNNs (ShallowConvNet, EEGNet) trained directly on the cleaned 19-channel EEG, with no
 hand-made features, to compare with the classical models. They need a GPU, so training runs on
-a separate GPU machine; the results, weights and predictions are kept here.
+a separate GPU machine (a Kaggle notebook generated from `scripts/train_cnn.py` is in
+[`kaggle_train_cnn.ipynb`](kaggle_train_cnn.ipynb)); the results, weights and predictions are
+kept here.
 
 ```bash
-python scripts/export_cnn_data.py                                   # package the cleaned signals → data/cnn/ (git-ignored, patient data)
-python scripts/train_cnn.py --data data/cnn --arch shallow --augment  # on the GPU machine, ~35 min; also --arch eegnet, without --augment
-python scripts/evaluate_cnn.py                                      # score them like the 12 classical models → docs/DEEP_LEARNING_RESULTS.md
+python scripts/export_cnn_data.py                                    # package the cleaned signals → data/cnn/ (git-ignored, patient data)
+python scripts/train_cnn.py --data data/cnn --arch shallow --augment  # on the GPU machine, ~35 min; --aug-<name> for one transform alone, --aug-all for every one
+python scripts/evaluate_cnn.py                                       # score them like the classical models → docs/DEEP_LEARNING_RESULTS.md
 ```
 
+`train_cnn.py` has 8 independent augmentation transforms (`--aug-amplitude`, `--aug-noise`,
+`--aug-channel-dropout`, `--aug-mirror`, `--aug-time-shift`, `--aug-time-mask`,
+`--aug-band-stop`, `--aug-mixup`); `--augment` is a shorthand for the original five together.
 After training, copy `predictions/<name>.parquet` to `outputs/predictions/` and the `models/`
 files and `*_config.json` to `models/cnn/` (see [`models/cnn/README.md`](models/cnn/README.md)).
-Results: [`docs/DEEP_LEARNING_RESULTS.md`](docs/DEEP_LEARNING_RESULTS.md) — the best CNN
-(ShallowConvNet, augmented) reaches event F1 0.815 (nested threshold), below the SVM.
+Results: [`docs/DEEP_LEARNING_RESULTS.md`](docs/DEEP_LEARNING_RESULTS.md) — the best of 12 CNN
+runs (ShallowConvNet, amplitude scaling) reaches event F1 0.817 (nested threshold), well below
+the classical models.
 
 ### Ensembles
 
@@ -173,10 +193,11 @@ score the blend the same honest way (threshold never chosen on the fold it is ap
 
 ```bash
 python scripts/ensemble_predictions.py --models svm_unbalanced rf_unbalanced
-python scripts/ensemble_predictions.py --models svm_unbalanced --extra outputs/predictions/cnn_shallow_augmented.parquet
+python scripts/ensemble_predictions.py --models svm_augmented_channel_dropout --extra outputs/predictions/cnn_shallow_amp.parquet
 ```
 
-Report: [`docs/ENSEMBLE_RESULTS.md`](docs/ENSEMBLE_RESULTS.md).
+Report: [`docs/ENSEMBLE_RESULTS.md`](docs/ENSEMBLE_RESULTS.md) — no ensemble tried beats the
+best single model (SVM, channel-dropout augmentation, 0.901); the best blend only ties it.
 
 ## The app
 
@@ -192,13 +213,13 @@ The app opens in the light theme; the moon/sun button switches to the dark theme
 
 - **Home**: what the app is for, a real seizure with the best model's detection, the seven steps from raw EEG to detected seizures, the best model of each training mode, and buttons to the three parts. All numbers are read from the data and the registry.
 - **Visualisation**: the data only. Choose a patient in the sidebar (sex, age, duration, number of seizures). The 19 channels are toggle chips grouped by scalp region ("Show all" brings them back), stacked in 10-20 order or overlaid. Each curve turns green during a real seizure, a diamond marks each seizure start, and the bottom row is "yes" during a seizure.
-- **Prediction**: the model chosen in the header (algorithm: DT / RF / KNN / SVM; training mode: Unbalanced / Balanced / Augmented). A summary line gives the verdict for this patient (found, missed, false alarms) and the model's scores on all patients. The plot adds the model's probability, its detections and the threshold. The threshold slider starts at the model's best threshold and everything updates live.
+- **Prediction**: the model chosen in the header (algorithm: DT / RF / KNN / SVM; training mode: any of the 8 modes). A summary line gives the verdict for this patient (found, missed, false alarms) and the model's scores on all patients. The plot adds the model's probability, its detections and the threshold. The threshold slider starts at the model's best threshold and everything updates live.
 - **Comparison**, read from top to bottom:
   - *Who wins*: the best of the compared models, then the others in rank order.
   - *Why*: event F1 against the threshold, precision-recall curves, training class distribution.
   - *Detail*: sortable ranking, confusion matrices, a timeline of the selected patient and event F1 per patient.
 
-  Presets: "Same training mode", "Same algorithm, all modes", "All models", or a custom list. One colour per algorithm; solid = unbalanced, dashed or hatched = balanced, dotted = augmented.
+  Presets: "Same training mode", "Same algorithm, all modes", "All models", or a custom list. One colour per algorithm; solid = unbalanced, dashed or hatched = balanced, dotted = any augmented mode.
 
 Plot toolbar: previous/next page (also the ← → keys), previous/next seizure, **Spectrum** (frequency content of a 2 s window, also opened by clicking a curve), **Intervals** (real seizures and detections), "Save view as PNG" and "Download intervals CSV".
 
@@ -218,7 +239,7 @@ Fonts (Google Fonts) and icons (Iconify) are loaded from the internet; offline, 
 | [`docs/PARTS_X_XI.md`](docs/PARTS_X_XI.md) | Temporal detection and error analysis (Random Forest) |
 | [`docs/MODEL_COMPARISON.md`](docs/MODEL_COMPARISON.md) | The 12 models: scores, seeds, false alarms against hyperventilation and SLI, conclusion |
 | [`docs/CHANNELS_8_VS_19.md`](docs/CHANNELS_8_VS_19.md) | 8 channels against 19 channels (the 8-channel results are in `outputs/archive_8ch/`) |
-| [`docs/DEEP_LEARNING_RESULTS.md`](docs/DEEP_LEARNING_RESULTS.md) | The 3 CNNs against the SVM: nested threshold, smoothing, SzCORE |
+| [`docs/DEEP_LEARNING_RESULTS.md`](docs/DEEP_LEARNING_RESULTS.md) | 12 CNN runs (2 architectures, 8 augmentation transforms) against the classical models: nested threshold, smoothing, SzCORE |
 | [`docs/ENSEMBLE_RESULTS.md`](docs/ENSEMBLE_RESULTS.md) | Blends of models (SVM + RF, SVM + CNN, ...) |
 | [`docs/DATA_LAYOUT.md`](docs/DATA_LAYOUT.md) | What each folder under `data/` contains |
 | [`docs/ANNOTATION_DECISIONS.md`](docs/ANNOTATION_DECISIONS.md) | Decisions on the annotation special cases |
@@ -233,13 +254,14 @@ Fonts (Google Fonts) and icons (Iconify) are loaded from the internet; offline, 
 ├── config/                  annotation decisions (YAML)
 ├── data/                    not in git: raw/, interim/, processed/ (see docs/DATA_LAYOUT.md), cnn/ (GPU training package)
 ├── docs/                    reports (one per topic) and design notes
-├── models/                  registry.json + the 12 classical models; cnn/ = CNN weights and configs
+├── kaggle_train_cnn.ipynb   Kaggle notebook, generated from scripts/train_cnn.py
+├── models/                  registry.json + the 32 classical models; cnn/ = CNN weights and configs
 ├── outputs/                 figures, predictions (outputs/predictions/), result tables
+├── report/                  full LaTeX write-up (report/main.pdf) and its source
 ├── scripts/                 one script per pipeline step (see Commands)
 ├── src/                     library code used by the scripts and the app
 ├── requirements.txt
-├── README.md
-└── CLAUDE.md                short project notes for coding assistants
+└── README.md
 ```
 
 `src/`:

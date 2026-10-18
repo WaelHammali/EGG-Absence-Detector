@@ -1,9 +1,9 @@
 """Blend out-of-fold probabilities of several models and score the blend.
 
-The cheapest way to try to beat a single model (research report, part A7): average the
-probabilities of two models that make different kinds of mistakes, window by window. No
-retraining. Works on any mix of the 12 registered classical models and external predictions
-with the same schema (recording, window, start_s, end_s, true_class, fold, proba) — in
+The cheapest way to try to beat a single model: average the probabilities of two models that
+make different kinds of mistakes, window by window. No retraining. Works on any mix of the
+registered classical models and external predictions with the same schema (recording, window,
+start_s, end_s, true_class, fold, proba) — in
 particular the CNN predictions in outputs/predictions/cnn_*.parquet.
 
 Threshold, two ways (no model here was retrained, so there is nothing to choose a threshold
@@ -157,8 +157,8 @@ def write_report() -> None:
     lines = [
         "# Ensemble results",
         "",
-        "Blends of out-of-fold probabilities from several already-trained models (no retraining): "
-        "research report, part A7, \"the cheapest way to get a real gain\". Built with `python scripts/ensemble_predictions.py`.",
+        "Blends of out-of-fold probabilities from several already-trained models (no retraining), "
+        "the cheapest way to try to get a real gain. Built with `python scripts/ensemble_predictions.py`.",
         "",
         "- **held-out-fold** (main number): for each outer fold, the threshold is swept on the other 4 folds' predictions only, "
         "never on the fold being scored — valid even though nothing was retrained for this fold.",

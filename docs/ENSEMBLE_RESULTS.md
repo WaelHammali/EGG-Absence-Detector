@@ -1,6 +1,6 @@
 # Ensemble results
 
-Blends of out-of-fold probabilities from several already-trained models (no retraining): research report, part A7, "the cheapest way to get a real gain". Built with `python scripts/ensemble_predictions.py`.
+Blends of out-of-fold probabilities from several already-trained models (no retraining), the cheapest way to try to get a real gain. Built with `python scripts/ensemble_predictions.py`.
 
 - **held-out-fold** (main number): for each outer fold, the threshold is swept on the other 4 folds' predictions only, never on the fold being scored — valid even though nothing was retrained for this fold.
 - **optimistic**: one threshold swept on all out-of-fold predictions at once, kept for reference (the same convention as the registered models' own best threshold).
