@@ -1,0 +1,71 @@
+\chapter{Repository Structure and Commands}
+\label{chap:appendix}
+
+\section{Repository layout}
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \texttt{data/processed/recordings/<set>/}, \texttt{data/processed/datasets/<name>/} ---
+    one folder per recording set and per dataset variant. \texttt{src/paths.py} defines every
+    path used by the project's scripts.
+  \item \texttt{scripts/} --- one script per pipeline step, each independently runnable.
+  \item \texttt{models/} --- \texttt{registry.json} plus the 12 classical \texttt{.joblib}
+    models; \texttt{models/cnn/} holds the CNN weights (model classes live in
+    \texttt{scripts/train\_cnn.py}, kept self-contained so it can be copied to a GPU machine).
+  \item \texttt{app.py} + \texttt{src/app\_*.py} --- the Dash application.
+  \item \texttt{docs/} --- one Markdown report per topic.
+\end{itemize}
+
+\section{Key commands}
+
+\begin{verbatim}
+python app.py
+    # run the application
+
+python scripts/build_dataset.py --annotations official
+    # rebuild the official 21-recording dataset
+
+python scripts/train_registry.py
+    # train the 12 classical models
+
+python scripts/export_cnn_data.py
+    # package data for GPU training -> data/cnn/ (never committed)
+
+python scripts/evaluate_cnn.py
+    # score the CNNs (reads models/cnn/ and outputs/predictions/)
+
+python scripts/ensemble_predictions.py --models <key> <key>
+    # blend already-trained models, no retraining
+\end{verbatim}
+
+\section{Dependencies}
+
+Pinned versions, from \texttt{requirements.txt}:
+
+\begin{multicols}{3}
+\small
+\begin{itemize}[leftmargin=1.2em,itemsep=0pt]
+  \item numpy 2.5.3
+  \item scipy 1.18.1
+  \item pandas 3.0.6
+  \item pyarrow 25.0.1
+  \item scikit-learn 1.9.1
+  \item joblib 1.6.0
+  \item mat-io 1.0.0
+  \item h5py 3.16.0
+  \item openpyxl 3.1.5
+  \item XlsxWriter 3.2.9
+  \item PyYAML 6.0.3
+  \item matplotlib 3.11.2
+  \item seaborn 0.13.2
+  \item timescoring 0.0.7
+  \item dash 4.4.1
+  \item dash-mantine-components 2.8.0
+  \item dash-iconify 0.1.2
+  \item plotly 6.9.0
+  \item plotly-resampler 0.11.1
+  \item selenium 4.50.0 (optional)
+\end{itemize}
+\end{multicols}
+
+No PyTorch is listed: CNN training takes place on separate GPU hardware, and only the resulting
+weights and predictions are brought back into this repository.

@@ -1,0 +1,143 @@
+\documentclass[11pt,a4paper]{report}
+
+% ---------- Page geometry ----------
+\usepackage[margin=2.7cm,headheight=14pt]{geometry}
+
+% ---------- Fonts & typography ----------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{parskip}
+\usepackage{amsmath}
+
+% ---------- Tables, figures, color ----------
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{xcolor}
+\usepackage{tcolorbox}
+\tcbuselibrary{skins,breakable}
+\usepackage{enumitem}
+\usepackage{placeins}
+\usepackage{multicol}
+
+% ---------- Headers / footers ----------
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\itshape\leftmark}
+\fancyhead[R]{\small\itshape Absence-seizure detection in EEG}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0pt}
+
+\fancypagestyle{plain}{%
+  \fancyhf{}
+  \fancyfoot[C]{\thepage}
+  \renewcommand{\headrulewidth}{0pt}
+}
+
+% ---------- Colors ----------
+\definecolor{seizureteal}{HTML}{0B7285}
+\definecolor{inkdark}{HTML}{0F172A}
+\definecolor{panelgray}{HTML}{F5F7FA}
+\definecolor{warnamber}{HTML}{B45309}
+
+% ---------- Chapter/section styling ----------
+\usepackage{titlesec}
+\titleformat{\chapter}[hang]
+  {\normalfont\huge\bfseries\color{inkdark}}{\thechapter}{20pt}{\Huge}
+\titlespacing*{\chapter}{0pt}{0pt}{30pt}
+\titleformat{\section}{\normalfont\Large\bfseries\color{seizureteal}}{\thesection}{10pt}{}
+\titleformat{\subsection}{\normalfont\large\bfseries}{\thesubsection}{8pt}{}
+
+% ---------- Hyperlinks (load last) ----------
+\usepackage[hidelinks,colorlinks=true,linkcolor=seizureteal,citecolor=seizureteal,urlcolor=seizureteal]{hyperref}
+\usepackage[capitalize]{cleveref}
+
+% ---------- Graphics search path ----------
+\graphicspath{{figures/}}
+
+% ---------- Chapter-summary box ----------
+\newtcolorbox{summarybox}{%
+  enhanced, breakable, colback=panelgray, colframe=seizureteal,
+  boxrule=0.6pt, arc=2pt, left=8pt, right=8pt, top=6pt, bottom=6pt,
+  title={Chapter summary}, fonttitle=\bfseries\color{white},
+  colbacktitle=seizureteal, coltitle=white
+}
+
+\newtcolorbox{pendingbox}{%
+  enhanced, breakable, colback=yellow!8, colframe=warnamber,
+  boxrule=0.6pt, arc=2pt, left=8pt, right=8pt, top=6pt, bottom=6pt,
+  title={Pending / not yet finished}, fonttitle=\bfseries\color{white},
+  colbacktitle=warnamber, coltitle=white
+}
+
+% ---------- Misc ----------
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{6pt}
+\renewcommand{\arraystretch}{1.15}
+
+\title{\Huge\textbf{Detecting Absence Seizures in EEG}\\[6pt]
+  \Large A classical machine-learning pipeline, built from the raw recordings up,\\
+  measured against a deep-learning baseline}
+\author{Wael Hammali\\\small École Nationale d'Ingénieurs de Tunis}
+\date{\today}
+
+\begin{document}
+
+% ---------- Title page ----------
+\begin{titlepage}
+  \centering
+  \vspace*{2cm}
+  {\small\bfseries\color{seizureteal} DATA-MINING PROJECT\par}
+  \vspace{0.3cm}
+  \rule{0.4\linewidth}{0.8pt}\par
+  \vspace{1.5cm}
+  {\Huge\bfseries\color{inkdark} Detecting Absence Seizures\\[4pt] in EEG\par}
+  \vspace{1cm}
+  {\Large A classical machine-learning pipeline, built from the raw recordings\\
+   up, and measured, honestly, against a deep-learning baseline.\par}
+  \vfill
+  \begin{minipage}{0.45\linewidth}
+    \raggedright
+    \textbf{Wael Hammali}\\
+    École Nationale d'Ingénieurs de Tunis
+  \end{minipage}
+  \hfill
+  \begin{minipage}{0.45\linewidth}
+    \raggedleft
+    21 recordings \textbullet{} 19 EEG channels\\
+    93 confirmed seizures
+  \end{minipage}
+  \vspace{1.5cm}
+  \par{\large \today\par}
+\end{titlepage}
+
+\pagenumbering{roman}
+\tableofcontents
+\listoffigures
+\listoftables
+\clearpage
+\pagenumbering{arabic}
+
+\input{chapters/01_introduction}
+\input{chapters/02_raw_data}
+\input{chapters/03_preprocessing}
+\input{chapters/04_classical_ml}
+\input{chapters/05_augmentation}
+\input{chapters/06_ensemble}
+\input{chapters/07_deep_learning}
+\input{chapters/08_evaluation}
+\input{chapters/09_application}
+\input{chapters/10_lessons}
+\input{chapters/11_conclusion}
+\appendix
+\input{chapters/12_appendix}
+
+\end{document}

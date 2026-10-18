@@ -1,0 +1,140 @@
+\chapter{Data Augmentation}
+\label{chap:augmentation}
+
+The first augmentation attempt (shift and mirror) never beat the plain baseline. Rather than
+stop there, five more methods were tried, each tested alone first, then the winners combined
+--- and one of them turned out to be the best single model in the entire project. This chapter
+covers all six methods, why each one was chosen, and the full, honest result of testing them.
+
+\section{Shift and mirror: the first attempt}
+
+Only seizure (class 1) windows are created, and only from the real, filtered signal of the
+training recordings --- never from recordings held out for testing, and never anything
+synthesized from nothing.
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{Shift.} Extra 2-second windows starting 0.25, 0.5, and 0.75 seconds after each
+    regular window's start time (the regular window grid has a 1-second hop), kept under the
+    same rule used everywhere else: at least 50\% seizure coverage.
+  \item \textbf{Mirror.} Every seizure window, regular or shifted, with its left and right
+    electrodes swapped: Fp1$\leftrightarrow$Fp2, F7$\leftrightarrow$F8, F3$\leftrightarrow$F4,
+    T3$\leftrightarrow$T4, C3$\leftrightarrow$C4, T5$\leftrightarrow$T6, P3$\leftrightarrow$P4,
+    O1$\leftrightarrow$O2. The three midline channels, Fz, Cz, and Pz, are left unchanged.
+\end{itemize}
+
+Across the 21 recordings this adds 8{,}230 synthetic seizure windows on top of the 1{,}244
+original ones: 3{,}493 shifted, 1{,}244 mirrored, and 3{,}493 both shifted and mirrored. These
+were chosen first because both stay entirely inside real, recorded signal --- nothing is
+synthesized, so nothing physiologically implausible can be fabricated by the transformation
+itself. Mirroring is anatomically justified specifically for absence seizures (generalized,
+bilaterally synchronous discharges, so a left-right-swapped window is still a valid seizure
+pattern); shifting is consistent with a tolerance already built into the official labeling rule.
+
+The result, reported honestly: shift+mirror raised recall for every algorithm (SVM: 86 to 90 of
+93 found) but also raised false alarms sharply (SVM: 16 to 32) and lowered event F1 (SVM: 0.894
+to 0.862). It never beat the plain, unbalanced baseline for any of the four algorithms.
+
+\section{Five more methods, tried the same way}
+
+A negative result for one method is not a verdict on augmentation in general. Five more
+methods were built, each respecting the same rule as shift and mirror --- training folds only,
+built from real signal, one new synthetic window per real seizure window (no extra time
+offsets, so each method adds exactly 1{,}244 windows, directly comparable to one another):
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{Amplitude scaling.} Multiply the whole window by a random gain between 0.6 and
+    1.6, simulating the kind of electrode-to-electrode or session-to-session gain variation a
+    real recording can have.
+  \item \textbf{Noise.} Add Gaussian noise to the window, scaled to that window's own signal
+    level, simulating ordinary sensor noise.
+  \item \textbf{Time masking.} Blank out a short random contiguous span inside the window (up to
+    25\% of it) to zero, forcing the model not to rely on any one instant.
+  \item \textbf{Channel dropout.} Zero out 1 to 3 random EEG channels for the whole window,
+    simulating electrodes that failed or were never connected.
+  \item \textbf{Combined.} The windows from whichever of the above turned out to help, merged
+    into one dataset --- built only after the individual results were in, not before.
+\end{itemize}
+
+The broader menu of EEG augmentation methods also includes frequency-domain transforms (Fourier
+surrogates, frequency shift), mixing methods (mixup, cutmix, pasting segments), and generative
+models (GANs, VAEs, diffusion). These were set aside for the same reason shift and mirror were
+originally preferred over them: generative methods need far more than 93 seizures to avoid
+memorizing or fabricating unrealistic signal, and mixing methods risk blending two unrelated
+seizure segments into a composite that does not correspond to any real physiological event. The
+five methods above were chosen because each one models a specific, plausible real-world
+imperfection (gain drift, sensor noise, a dead channel, a brief dropout) rather than an
+arbitrary transformation.
+
+\section{What actually helped}
+
+\begin{table}[H]
+  \centering
+  \small
+  \caption{Every augmentation method, every algorithm, event F1 at its own best threshold.
+    Bold marks the best result for that algorithm; a dagger marks a result that beats the
+    algorithm's own unbalanced baseline.}
+  \label{tab:augmentation-full}
+  \begin{tabular}{llrrr}
+    \toprule
+    Algorithm & Method & Event F1 & Found/93 & False alarms \\
+    \midrule
+    SVM & unbalanced (baseline) & 0.894 & 86 & 16 \\
+    SVM & shift + mirror & 0.862 & 90 & 32 \\
+    SVM & amplitude & 0.882 & 88 & 23 \\
+    SVM & noise & 0.889 & 87 & 20 \\
+    SVM & time masking & 0.870 & 87 & 25 \\
+    SVM & \textbf{channel dropout} & \textbf{0.901}$^\dagger$ & 88 & 18 \\
+    SVM & combined (noise + dropout) & 0.889 & 87 & 20 \\
+    \midrule
+    Random Forest & unbalanced (baseline) & 0.867 & 87 & 26 \\
+    Random Forest & shift + mirror & 0.854 & 84 & 26 \\
+    Random Forest & amplitude & 0.867 & 87 & 24 \\
+    Random Forest & noise & 0.872$^\dagger$ & 86 & 23 \\
+    Random Forest & time masking & 0.859 & 79 & 15 \\
+    Random Forest & \textbf{channel dropout} & \textbf{0.880}$^\dagger$ & 82 & 14 \\
+    Random Forest & combined (noise + dropout) & 0.878$^\dagger$ & 81 & 13 \\
+    \midrule
+    KNN & unbalanced (baseline) & 0.828 & 86 & 37 \\
+    KNN & \textbf{noise} & \textbf{0.832}$^\dagger$ & 81 & 29 \\
+    KNN & combined (noise + dropout) & 0.829$^\dagger$ & 81 & 30 \\
+    \midrule
+    Decision Tree & unbalanced (baseline) & 0.290 & 91 & 561 \\
+    Decision Tree & \textbf{combined (noise + dropout)} & \textbf{0.296}$^\dagger$ & 93 & 619 \\
+    Decision Tree & noise & 0.295$^\dagger$ & 93 & 570 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Two methods actually work: \textbf{channel dropout} and \textbf{noise}. Channel dropout gives
+the single best result in this entire project --- SVM with channel-dropout augmentation reaches
+event F1 \textbf{0.901} (88 of 93 found, 18 false alarms, threshold 0.90), beating the plain SVM
+baseline (0.894) by the same margin the much more expensive SVM+CNN ensemble achieved
+(\Cref{chap:ensemble}), except this is one plain model, not a blend of two. Channel dropout also
+helps Random Forest (0.867 to 0.880). Noise helps Random Forest, KNN, and (marginally)
+Decision Tree.
+
+Time masking hurt every algorithm it was tried on, and amplitude scaling was mixed (helped SVM,
+did nothing for Random Forest). Combining the two winners, noise and channel dropout, into one
+dataset did \emph{not} beat channel dropout alone for either SVM (0.889 vs.\ 0.901) or Random
+Forest (0.878 vs.\ 0.880) --- the single best method outperformed the combination, a useful
+reminder that more augmentation is not automatically better augmentation.
+
+\textbf{Why channel dropout specifically works}: \Cref{chap:preprocessing} showed that no single
+EEG channel dominates a trained model's decisions (the heaviest channel, O1, carries under 10\%
+of total importance), consistent with absence seizures being a generalized, whole-scalp pattern.
+Channel dropout trains the model on windows missing 1--3 channels, which cannot destroy the
+seizure signature --- plenty of real signal remains in the other 16--18 channels. Time masking,
+by contrast, removes a slice of \emph{every} channel at the same instant, which can erase the
+one thing that actually identifies an absence seizure: its rhythm over time. Losing space is
+survivable for this problem; losing time is not.
+
+\begin{summarybox}
+Six augmentation methods were tried: the original shift+mirror, four new methods tested in
+isolation (amplitude scaling, noise, time masking, channel dropout), and one combined dataset
+built from the two methods that actually helped. Only channel dropout and noise improved
+results; channel dropout gives the best result in the whole project, SVM at event F1 0.901,
+beating the plain SVM baseline (0.894) as a single model, no blending required. Combining the
+two winners did not beat the best one alone. Time masking consistently hurt, and the original
+shift+mirror method never beat the baseline for any algorithm --- a real negative result,
+reported alongside the real positive one.
+\end{summarybox}

@@ -27,6 +27,11 @@ MODE_TEXT = {
     "unbalanced": "Every training window, as recorded: about 4 % seizure.",
     "balanced": "All seizure windows plus as many normal windows drawn at random (undersampling).",
     "augmented": "Every training window plus extra seizure windows: shifted by 0.25 to 0.75 s and mirrored left-right.",
+    "augmented_amplitude": "Every training window plus extra seizure windows, each rescaled by a random amplitude gain.",
+    "augmented_noise": "Every training window plus extra seizure windows, each with a little random noise added.",
+    "augmented_time_mask": "Every training window plus extra seizure windows, each with a short random span blanked out.",
+    "augmented_channel_dropout": "Every training window plus extra seizure windows, each with 1 to 3 random channels zeroed.",
+    "augmented_combined": "Every training window plus extra seizure windows combining whichever augmentation methods helped on their own.",
 }
 
 

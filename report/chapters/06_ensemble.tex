@@ -1,0 +1,75 @@
+\chapter{Ensemble}
+\label{chap:ensemble}
+
+Many models already exist, fully trained, each producing an out-of-fold probability for every
+window. Rather than train anything new, this chapter asks a cheaper question: does simply
+averaging the probabilities of two or more already-trained models do better than the best one
+alone?
+
+\section{Method}
+
+Each ensemble blends the out-of-fold probabilities of two or more already-trained models (and,
+in several rows below, one CNN) by averaging them --- no retraining involved. Two different
+threshold conventions are reported, because they answer different questions:
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{Held-out-fold} (the honest number): for each of the 5 outer folds, the detection
+    threshold is swept using only the \emph{other} four folds' predictions, never the fold being
+    scored.
+  \item \textbf{Optimistic}: a single threshold swept across all out-of-fold predictions at
+    once --- the same convention used for the ``best threshold'' column in
+    \Cref{tab:classical-results}, kept here only for comparison.
+\end{itemize}
+
+\section{Results}
+
+\begin{table}[H]
+  \centering
+  \small
+  \caption{Ensemble blends, held-out-fold threshold, against the two single-model baselines.}
+  \label{tab:ensemble-results}
+  \begin{tabular}{p{6.4cm}rrrr}
+    \toprule
+    Ensemble & Event F1 & Found/93 & FA & SzCORE F1 \\
+    \midrule
+    SVM, channel dropout (single model, new best) & \textbf{0.901} & 88 & 18 & --- \\
+    SVM Unbalanced (single model, original baseline) & 0.894 & 86 & 16 & --- \\
+    SVM Unbalanced + ShallowConvNet Augmented & 0.901 & 90 & 19 & 0.900 \\
+    SVM, channel dropout + ShallowConvNet, amplitude & 0.896 & 89 & 19 & 0.892 \\
+    SVM Unbalanced + Random Forest Unbalanced & 0.894 & 85 & 15 & 0.894 \\
+    SVM, channel dropout + Random Forest Unbalanced & 0.823 & 84 & 31 & 0.866 \\
+    SVM, channel dropout + Random Forest, channel dropout & 0.817 & 81 & 29 & 0.846 \\
+    SVM Unb.\ + RF Unb.\ + KNN Unb. & 0.874 & 83 & 18 & 0.881 \\
+    SVM Unbalanced + KNN Unbalanced & 0.871 & 81 & 15 & 0.872 \\
+    2$\times$SVM Unb.\ + Random Forest Unb. & 0.849 & 83 & 23 & 0.870 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\textbf{No ensemble beats the best single model.} SVM with channel-dropout augmentation
+(\Cref{chap:augmentation}) reaches event F1 0.901 on its own. The best ensemble found, SVM
+Unbalanced blended with the augmented ShallowConvNet CNN, reaches exactly the same score, 0.901
+--- a genuine tie, not an improvement, and it does so with a different, more expensive recipe (a
+second model to train and maintain) for the same result a single classical model already gives.
+
+Blending the \emph{new} best SVM with anything else actually makes things worse, not better:
+paired with the best CNN it drops to 0.896; paired with Random Forest (either version) it drops
+further, to 0.817--0.823. This makes sense in hindsight --- the earlier ensemble gains came from
+combining models that made \emph{different kinds} of mistakes (SVM unbalanced is conservative
+and precise, the CNN and Random Forest catch different seizures). The new best SVM already
+captures much of that diversity internally, through the channel-dropout training itself, so
+blending it with another model adds noise more than it adds new information.
+
+The older SVM+Random Forest blend (both unbalanced) still ties the original 0.894 baseline, with
+a different mix of hits and misses (85 found, 15 false alarms, against the SVM alone's 86 and
+16) --- a result worth remembering but not a reason to prefer it over either single-model result
+above.
+
+\begin{summarybox}
+Blending already-trained models, with no retraining, was tried extensively. The best blend found
+(SVM unbalanced + an augmented CNN) ties the project's best single model (0.901) but never beats
+it, and blending the new best SVM (channel-dropout augmentation) with anything else makes results
+worse. The practical conclusion: a single, well-chosen model --- SVM with channel-dropout
+augmentation --- is both the simplest and the best-performing option in this project, with no
+ensemble complexity needed to reach the same score.
+\end{summarybox}

@@ -1,0 +1,64 @@
+\chapter{Introduction}
+\label{chap:introduction}
+
+An absence seizure is short. It lasts only a few seconds, it shows up across the whole scalp
+at once rather than in one spot, and on a long EEG recording it is genuinely easy for a human
+reader to miss. Clinically, it is described as a generalized, roughly 3~Hz spike-and-wave
+discharge, usually lasting 3 to 20 seconds, and it is seen mostly in children. Catching every
+one of these events by eye, in hours of recording, is tedious and error-prone work.
+
+This project builds an automatic detector for absence seizures, trained and evaluated on 21
+real clinical EEG recordings. The goal was never simply to produce a high score on a benchmark;
+it was to build something a clinician could actually trust: a detector that says, for a given
+recording, here is where I believe a seizure happened, and here is how often I am wrong. That
+second half --- being honest about false alarms, not just about seizures found --- shaped
+almost every decision in this project, from how the data was split to how a detection is
+scored.
+
+\section{Objectives}
+
+Three things were set out from the start:
+
+\begin{enumerate}[leftmargin=1.4em]
+  \item \textbf{Build a reliable classical pipeline.} Take the raw EEG recordings, clean and
+    align them against their seizure annotations, filter and window the signal, extract
+    hand-crafted features, and train a set of classical machine-learning models to detect
+    seizures event by event, not just window by window.
+  \item \textbf{Push past the obvious baseline.} Once a working pipeline exists, try to improve
+    it: rebalancing the training data, augmenting the rare seizure class, and blending several
+    models together, and report honestly which of these actually helped.
+  \item \textbf{Compare against deep learning.} Train a convolutional neural network directly on
+    the raw filtered signal, with no hand-crafted features at all, and measure it against the
+    classical pipeline under the same evaluation rules, to see whether a model that learns its
+    own representation can do better than one built on 320 hand-designed numbers per window.
+  \item \textbf{Make the results usable.} Package everything behind a web application so that
+    the recordings, the model predictions, and the comparison between models can actually be
+    explored, not just read off a table in a report.
+\end{enumerate}
+
+\section{What this report covers}
+
+The chapters that follow tell this story in the order it actually happened. \Cref{chap:rawdata}
+covers the raw data itself: 22 recordings that started as raw MATLAB files with no declared
+sampling rate, no declared amplitude unit, and seizure times stored as clock times with no
+absolute start time to anchor them to --- and the concrete decisions made to turn that into a
+clean, trustworthy 21-recording, 93-seizure dataset. \Cref{chap:preprocessing} covers the signal
+processing and feature extraction built on top of that clean data.
+\Cref{chap:classicalml,chap:augmentation,chap:ensemble} cover the classical machine-learning
+pipeline: twelve models, three training strategies, and what helped and what did not.
+\Cref{chap:deeplearning} covers the deep-learning comparison, including a real bug that produced
+a real crash and how it was found and fixed. \Cref{chap:evaluation} pulls the evaluation
+methodology together across all of the above, since several different threshold-selection
+protocols are used in this project and keeping them straight matters for a fair comparison.
+\Cref{chap:application} describes the web application built to explore the results.
+\Cref{chap:lessons} is an honest account of what went wrong along the way, and
+\Cref{chap:conclusion} closes with what the project actually achieved and what is still left to
+do.
+
+\begin{summarybox}
+This project detects absence seizures in EEG, event by event, starting from 22 raw clinical
+recordings with no declared sampling rate or amplitude unit and an annotation workbook that
+needed real detective work to align. The result is a classical machine-learning pipeline (12
+models), a deep-learning comparison, and a web application to explore both --- reported here
+with every number traced back to its source, and every negative result kept in, not hidden.
+\end{summarybox}

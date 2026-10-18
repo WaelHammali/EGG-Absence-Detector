@@ -187,7 +187,7 @@ def header():
                             tip(
                                 "Training mode: Unbalanced trains on the real class proportions (about 96 % / 4 %); Balanced trains on as many normal windows as seizure windows (50 / 50); Augmented adds shifted and left-right mirrored copies of the training seizure windows (about 76 % / 24 %).",
                                 dmc.SegmentedControl(
-                                    id="train-mode", value=DATA.default_model.split("_")[1], withItemsBorders=False, **segment,
+                                    id="train-mode", value=DATA.default_model.split("_", 1)[1], withItemsBorders=False, **segment,
                                     data=[{"value": key, "label": label} for key, label in app_data.MODES.items()],
                                 ),
                             ),
@@ -826,7 +826,7 @@ def comparison_summary(models, sort, theme):
     cards = []
     for position, model in enumerate(by_score):
         value = values[model]
-        algorithm, mode = model.split("_")
+        algorithm, mode = model.split("_", 1)
         title = html.Span([model_swatch(model, theme), html.Span(app_data.ALGORITHMS[algorithm]), html.Span(f" · {app_data.MODES[mode]}", style={"color": "var(--app-text-3)", "fontWeight": 500})], className="card-title")
         facts = html.Div(
             [

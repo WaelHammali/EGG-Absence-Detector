@@ -28,7 +28,12 @@ REQUIRED = {
 }
 ALGORITHMS = {"dt": "Decision Tree", "rf": "Random Forest", "knn": "KNN", "svm": "SVM"}
 ALGORITHM_SHORT = {"dt": "DT", "rf": "RF", "knn": "KNN", "svm": "SVM"}
-MODES = {"unbalanced": "Unbalanced", "balanced": "Balanced", "augmented": "Augmented"}
+MODES = {
+    "unbalanced": "Unbalanced", "balanced": "Balanced", "augmented": "Augmented",
+    "augmented_amplitude": "Augmented (amplitude)", "augmented_noise": "Augmented (noise)",
+    "augmented_time_mask": "Augmented (time mask)", "augmented_channel_dropout": "Augmented (channel dropout)",
+    "augmented_combined": "Augmented (combined)",
+}
 
 
 class MissingData(Exception):
@@ -63,7 +68,7 @@ class AppData:
         return self.registry["models"][model]
 
     def label(self, model: str, short: bool = False) -> str:
-        algorithm, mode = model.split("_")
+        algorithm, mode = model.split("_", 1)
         return f"{(ALGORITHM_SHORT if short else ALGORITHMS)[algorithm]} · {MODES[mode]}"
 
     def best_threshold(self, model: str) -> float:

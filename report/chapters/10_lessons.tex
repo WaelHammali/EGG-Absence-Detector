@@ -1,0 +1,57 @@
+\chapter{Problems and Lessons Learned}
+\label{chap:lessons}
+
+Every project like this accumulates real problems along the way: bad data, bugs, and results
+that do not go the way you expected. This chapter collects the ones from this project
+honestly, rather than smoothing them out of the narrative.
+
+\begin{enumerate}[leftmargin=1.4em]
+  \item \textbf{No absolute clock in the raw files.} The recordings and their annotations each
+    started their own internal clock at zero, with no shared reference point anywhere in the raw
+    data. Recovering the real offset (\Cref{chap:rawdata}) required rejecting two tempting
+    shortcuts that would have quietly fabricated seizure labels.
+  \item \textbf{Conflicting annotation rows.} Two recordings had genuinely contradictory seizure
+    times in the workbook. Rather than pick a version by hand, each candidate was scored against
+    the real EEG signal, and the better-separated candidate was kept --- a repeatable, checkable
+    decision instead of a guess.
+  \item \textbf{Class imbalance by construction.} Only 3.96\% of windows contain a seizure.
+    Balanced training and the first augmentation attempt (shift+mirror) both turned out to
+    \emph{hurt} overall event F1 despite improving recall --- a genuine negative result, reported
+    in full rather than hidden. The lesson was not to stop there: testing five more augmentation
+    methods individually (\Cref{chap:augmentation}) found two, channel dropout and noise, that
+    genuinely help, and channel dropout became this project's best result. A negative result for
+    the first method tried was not a verdict on the whole approach.
+  \item \textbf{A real crash in the CNN training script.} \texttt{event\_counts()} used a pandas
+    index label as if it were an array position, which worked by coincidence until a particular
+    random validation split exposed it. The bug, how it was found, and the fix are described in
+    full in \Cref{chap:deeplearning}.
+  \item \textbf{Deep learning did not beat the classical baseline.} This was treated as a
+    hypothesis to test, not a result to engineer toward. It did not beat the SVM, and that
+    outcome is reported as the finding it is, in \Cref{chap:deeplearning}, rather than reframed
+    as a near-win.
+  \item \textbf{A long evaluation run had to be killed.} The nested-threshold re-evaluation of
+    the classical models (\Cref{chap:evaluation}) is memory-heavy and was killed once for lack of
+    available RAM during a full attempt; only 3 models have been scored this way so far. This
+    remains an open limitation, not something to paper over, and is listed again in
+    \Cref{chap:conclusion}.
+  \item \textbf{A naming collision silently overwrote good results.} When bringing new CNN runs
+    back from the GPU machine, a quick, one-fold smoke test (meant only to check the training
+    script still worked after a code change) happened to reuse the exact output names of two
+    already-trained, full, five-fold models. Copying the smoke test's files into place overwrote
+    the real results with a tiny, partial run until the mismatch was caught --- the overwritten
+    run's window count and found-seizure count were obviously too small for a full run, which is
+    what gave it away. The fix was mechanical (restore the real files, re-copy only the genuinely
+    new runs), but the lesson is not: any script whose output name depends on its flags needs a
+    naming scheme where a debug run and a real run can never collide, and every number brought
+    back from an external run is worth a sanity check against what a full run should look like
+    before it is trusted.
+\end{enumerate}
+
+\begin{summarybox}
+Nothing in this project went perfectly on the first try. The raw data needed real detective
+work before it could be trusted; two of the three attempts to fix class imbalance made results
+worse, not better; a real bug crashed the CNN training script on certain random splits; and a
+long-running evaluation script had to be killed for memory. All of it is reported here rather
+than quietly cleaned up, because a negative result, honestly reported, is still useful
+information.
+\end{summarybox}

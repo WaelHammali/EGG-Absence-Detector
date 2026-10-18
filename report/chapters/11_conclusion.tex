@@ -1,0 +1,64 @@
+\chapter{Conclusion and Future Work}
+\label{chap:conclusion}
+
+\section{What this project achieved}
+
+Starting from 22 raw clinical recordings with no declared sampling rate, no declared amplitude
+unit, and seizure annotations that needed real reconciliation against the signal itself, this
+project built a complete, working pipeline for detecting absence seizures in EEG: a cleaned
+21-recording, 93-seizure dataset; a documented, zero-phase filtering and feature-extraction
+pipeline; a wide search across classical models and training strategies, evaluated honestly,
+event by event, under a recording-level split; a six-method data-augmentation study with its
+real trade-offs reported in full, including the method that produced this project's best result;
+a deep-learning comparison covering two architectures and eight augmentation transforms,
+including a real bug found and fixed along the way; and a web application that makes every one
+of these results explorable, not just readable.
+
+The best result in the whole project is a single model: SVM trained with channel-dropout
+augmentation, event F1 0.901, 88 of 93 seizures found, 18 false alarms --- found by testing
+several new augmentation methods in isolation rather than accepting the first one tried. No
+ensemble of models beats this single model; the best blend only ties it. Deep learning alone,
+trained directly on raw signal and swept across 8 different augmentation transforms, does not
+beat the feature-engineered classical approach at this dataset size (best CNN: 0.817, a gap of
+0.084), which is itself a useful, honestly reported finding: with only 93 seizures across 21
+patients, hand-crafted features built with domain knowledge beat a model trying to learn its own
+representation from scratch, regardless of how that model is augmented.
+
+\section{Future work}
+
+Several pieces of work are explicitly unfinished, and are listed here rather than implied to be
+done:
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{Finish the nested-threshold evaluation.} Only 3 classical models have been
+    re-scored under the same nested-threshold protocol used for the CNNs (\Cref{chap:evaluation}),
+    and the new best model (SVM, channel dropout) is not one of them. Completing this would make
+    the classical-vs-CNN comparison fully fair, removing the small optimism currently present in
+    every classical headline number.
+  \item \textbf{A clinical review of the false alarms.} Several of the original best model's
+    false alarms coincide with hyperpnea or technician notes (\Cref{chap:classicalml}), and some
+    may be real, unannotated seizures. A neurologist's review, particularly of recordings
+    \texttt{210504B\_C} and \texttt{210427B\_C}, would clarify this and could raise every model's
+    measured precision. This review should be repeated for the new best model's own 18 false
+    alarms once scheduled.
+  \item \textbf{Check whether the channel-dropout gain is real.} The new best SVM's +0.007 F1
+    improvement over the original baseline (\Cref{chap:augmentation}) comes from one training
+    run. Repeating it with different random seeds would show whether this is a dependable gain
+    or a one-off, the same open question the earlier SVM+CNN ensemble result still carries.
+  \item \textbf{Verify the CNN deployment path.} An example for loading the trained CNN weights
+    exists in the model repository but has never actually been run, since no PyTorch environment
+    is available locally.
+  \item \textbf{Clean up unused data.} A 2~GB folder of labeled Excel exports is not used by any
+    current pipeline step and can be safely removed and rebuilt if ever needed again.
+\end{itemize}
+
+\begin{summarybox}
+This project set out to build a trustworthy absence-seizure detector and to test it honestly
+against a deep-learning alternative. It did both: a wide search across classical models,
+training strategies, and six augmentation methods produced a documented best result (event F1
+0.901, a single SVM with channel-dropout augmentation --- not an ensemble, not a deep model), and
+a clear, evidence-backed answer to the deep-learning question --- not yet, not at this dataset
+size, not with any of the 8 augmentation transforms tried. What remains is finishing the fair,
+nested evaluation of the best model, and getting a clinician's eyes on the false alarms that
+might not be false at all.
+\end{summarybox}

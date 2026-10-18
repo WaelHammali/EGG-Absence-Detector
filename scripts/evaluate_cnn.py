@@ -47,7 +47,12 @@ ARCH_NAMES = {"shallow": "ShallowConvNet", "eegnet": "EEGNet"}
 
 
 def label(config: dict) -> str:
-    return f"{ARCH_NAMES.get(config['arch'], config['arch'])}, {'augmented' if config['augment'] else 'plain'}"
+    arch = ARCH_NAMES.get(config["arch"], config["arch"])
+    augmentation = config.get("augmentation")  # new, structured schema; absent on older configs
+    if augmentation:
+        active = [name for name, on in augmentation.items() if on]
+        return f"{arch}, {'+'.join(active) if active else 'plain'}"
+    return f"{arch}, {'augmented' if config['augment'] else 'plain'}"  # the 3 original configs
 
 
 def find_runs(configs: Path, predictions: Path) -> list[tuple[str, Path, dict]]:

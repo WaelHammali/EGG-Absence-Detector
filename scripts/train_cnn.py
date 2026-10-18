@@ -18,9 +18,12 @@ Method (research report, part A8):
   probabilities too hard towards the extremes), AdamW + cosine schedule, early stopping on
   validation average precision, never before epoch --min-epochs (5 by default) so training
   does not lock onto a lucky noisy early checkpoint.
-- Optional online augmentation of BOTH classes: amplitude scaling, small noise, channel
-  dropout, left-right mirror, small time shift (the seizure share stays at about 4 %). In the
-  first run this was the one change that reliably helped (event F1 +0.04 on ShallowConvNet).
+- Optional online augmentation of BOTH classes (the seizure share stays at about 4 %): amplitude
+  scaling, noise, channel dropout, left-right mirror, time shift (the original five -- in the
+  first run this combination was the one change that reliably helped, event F1 +0.04 on
+  ShallowConvNet), plus time masking, frequency band-stop and mixup. Each has its own
+  --aug-<name> flag so it can be tested alone or combined; --augment is a shorthand for the
+  original five together, --aug-all enables everything.
 - Several seeds per fold; probabilities averaged.
 - Post-processing (smoothing + hysteresis) is not done here: it needs no retraining, so it is
   applied afterwards, automatically, by scripts/evaluate_cnn.py.
@@ -47,8 +50,13 @@ Outputs in --out (default outputs/cnn/):
 
 Usage (about 30-40 minutes per run on a T4 GPU):
     python train_cnn.py --data data/cnn --arch shallow
-    python train_cnn.py --data data/cnn --arch shallow --augment
+    python train_cnn.py --data data/cnn --arch shallow --augment          # the original five, together
     python train_cnn.py --data data/cnn --arch eegnet --augment
+    python train_cnn.py --data data/cnn --arch shallow --aug-noise        # one transform alone
+    python train_cnn.py --data data/cnn --arch shallow --aug-time-mask
+    python train_cnn.py --data data/cnn --arch shallow --aug-band-stop
+    python train_cnn.py --data data/cnn --arch shallow --aug-mixup
+    python train_cnn.py --data data/cnn --arch shallow --aug-all          # everything together
 Quick check (minutes): python train_cnn.py --data data/cnn --quick
 Copy predictions/<name>.parquet to outputs/predictions/ and the models/ and *_config.json files to
 models/cnn/, then score with scripts/evaluate_cnn.py.
@@ -79,6 +87,13 @@ MIRROR_INDEX = [CHANNELS.index(MIRROR.get(channel, channel)) for channel in CHAN
 MIN_GAP_S = 2.0
 MIN_DURATION_S = 2.0
 THRESHOLDS = np.round(np.arange(0.05, 0.995, 0.01), 2)
+# The original --augment combo, in the exact order augment() applies them.
+ORIGINAL_FIVE = ["amplitude", "noise", "channel_dropout", "mirror", "time_shift"]
+AUG_FLAGS = ORIGINAL_FIVE + ["time_mask", "band_stop", "mixup"]
+AUG_CODES = {
+    "amplitude": "amp", "noise": "noise", "channel_dropout": "chdrop", "mirror": "mirror",
+    "time_shift": "tshift", "time_mask": "tmask", "band_stop": "bstop", "mixup": "mixup",
+}
 
 
 # ----------------------------------------------------------------------------- arguments
@@ -89,7 +104,13 @@ def arguments(argv=None):
     parser.add_argument("--data", default="data/cnn", help="Folder with windows.csv and signals/ (written by scripts/export_cnn_data.py)")
     parser.add_argument("--out", default="outputs/cnn")
     parser.add_argument("--arch", choices=["shallow", "eegnet"], default="shallow")
-    parser.add_argument("--augment", action="store_true", help="Online augmentation of both classes")
+    parser.add_argument(
+        "--augment", action="store_true",
+        help="Shorthand for the original five transforms together: " + " ".join(f"--aug-{name.replace('_', '-')}" for name in ORIGINAL_FIVE),
+    )
+    for name in AUG_FLAGS:
+        parser.add_argument(f"--aug-{name.replace('_', '-')}", action="store_true", help=f"Online {name.replace('_', ' ')} augmentation alone (both classes alike)")
+    parser.add_argument("--aug-all", action="store_true", help="Enable every transform above, original five and new ones")
     parser.add_argument("--window-s", type=float, default=4.0, help="Input length in seconds, centred on each 2 s window")
     parser.add_argument("--epochs", type=int, default=40)
     parser.add_argument("--min-epochs", type=int, default=5, help="Early stopping cannot trigger before this epoch (avoids locking onto a lucky noisy early checkpoint)")
@@ -105,9 +126,30 @@ def arguments(argv=None):
     parser.add_argument("--quick", action="store_true", help="Tiny run to check that everything works")
     # parse_known_args: also works when run inside a notebook cell.
     args, _ = parser.parse_known_args(argv)
+    if args.aug_all:
+        for name in AUG_FLAGS:
+            setattr(args, f"aug_{name}", True)
+    if args.augment:
+        for name in ORIGINAL_FIVE:
+            setattr(args, f"aug_{name}", True)
     if args.quick:
         args.epochs, args.min_epochs, args.patience, args.seeds, args.folds = 2, 1, 2, 1, [1]
     return args
+
+
+def active_augmentations(args) -> list[str]:
+    """Enabled --aug-* transform names, in the fixed order augment() applies them."""
+    return [name for name in AUG_FLAGS if getattr(args, f"aug_{name}")]
+
+
+def run_name(arch: str, active: list[str]) -> str:
+    if not active:
+        suffix = "plain"
+    elif active == ORIGINAL_FIVE:
+        suffix = "augmented"  # same name the original --augment combo has always used
+    else:
+        suffix = "+".join(AUG_CODES[name] for name in active)
+    return f"cnn_{arch}_{suffix}"
 
 
 def find_data(path: str) -> Path:
@@ -203,24 +245,102 @@ def build(arch: str, n_times: int) -> nn.Module:
 
 # ----------------------------------------------------------------------------- augmentation
 
+# Each transform below is split out of what used to be one combined function, so every one can
+# be enabled alone (--aug-<name>) or together, for a staged "test each separately, then combine
+# the winners" comparison. --augment still applies exactly the original five, in the same order
+# as before, with the same per-call RNG consumption -- so old runs stay reproducible.
 
-def augment(x: torch.Tensor) -> torch.Tensor:
-    """Applied on the GPU to a training batch (both classes alike)."""
-    batch = x.shape[0]
-    device = x.device
-    x = x * torch.empty(batch, 1, 1, device=device).uniform_(0.6, 1.6)  # amplitude scaling
-    x = x + 0.03 * torch.randn_like(x)  # small noise (the signal is in MAD units)
-    drop = torch.rand(batch, device=device) < 0.3  # channel dropout: 1 to 3 channels
-    if drop.any():
-        count = torch.randint(1, 4, (batch,), device=device)
-        ranks = torch.rand(batch, x.shape[1], device=device).argsort(dim=1).argsort(dim=1)
-        mask = (ranks < count[:, None]) & drop[:, None]
-        x = x.masked_fill(mask[:, :, None], 0.0)
-    flip = torch.rand(batch, device=device) < 0.5  # left-right mirror
-    if flip.any():
-        x[flip] = x[flip][:, MIRROR_INDEX]
-    shift = int(torch.randint(-32, 33, (1,)).item())  # up to 0.125 s, same for the batch
+
+def aug_amplitude(x: torch.Tensor) -> torch.Tensor:
+    """Random 0.6-1.6x gain, one factor per sample."""
+    return x * torch.empty(x.shape[0], 1, 1, device=x.device).uniform_(0.6, 1.6)
+
+
+def aug_noise(x: torch.Tensor) -> torch.Tensor:
+    """Small additive Gaussian noise (the signal is in MAD units)."""
+    return x + 0.03 * torch.randn_like(x)
+
+
+def aug_channel_dropout(x: torch.Tensor) -> torch.Tensor:
+    """30% of samples get 1 to 3 random channels zeroed."""
+    batch, device = x.shape[0], x.device
+    drop = torch.rand(batch, device=device) < 0.3
+    if not drop.any():
+        return x
+    count = torch.randint(1, 4, (batch,), device=device)
+    ranks = torch.rand(batch, x.shape[1], device=device).argsort(dim=1).argsort(dim=1)
+    mask = (ranks < count[:, None]) & drop[:, None]
+    return x.masked_fill(mask[:, :, None], 0.0)
+
+
+def aug_mirror(x: torch.Tensor) -> torch.Tensor:
+    """50% of samples get their channels permuted left-right (same pairs as the classical pipeline)."""
+    batch, device = x.shape[0], x.device
+    flip = torch.rand(batch, device=device) < 0.5
+    if not flip.any():
+        return x
+    x = x.clone()
+    x[flip] = x[flip][:, MIRROR_INDEX]
+    return x
+
+
+def aug_time_shift(x: torch.Tensor) -> torch.Tensor:
+    """Roll the whole batch by up to +-0.125 s, same shift for every sample."""
+    shift = int(torch.randint(-32, 33, (1,)).item())
     return torch.roll(x, shifts=shift, dims=2) if shift else x
+
+
+def aug_time_mask(x: torch.Tensor, max_fraction: float = 0.25) -> torch.Tensor:
+    """Zero one random contiguous time span (up to max_fraction of the window), same span for the batch."""
+    samples = x.shape[2]
+    span = max(1, int(round(samples * max_fraction)))
+    length = int(torch.randint(1, span + 1, (1,)).item())
+    start = int(torch.randint(0, samples - length + 1, (1,)).item())
+    x = x.clone()
+    x[:, :, start : start + length] = 0.0
+    return x
+
+
+def aug_band_stop(x: torch.Tensor, fs: int = FS, max_bandwidth_hz: float = 4.0) -> torch.Tensor:
+    """Suppress one random frequency band (1-4 Hz wide), same band for the batch."""
+    samples = x.shape[2]
+    spectrum = torch.fft.rfft(x, dim=2)
+    freqs = torch.fft.rfftfreq(samples, d=1 / fs, device=x.device)
+    width = float(torch.empty(1).uniform_(1.0, max_bandwidth_hz).item())
+    low = float(torch.empty(1).uniform_(0.5, max(0.5, freqs[-1].item() - width)).item())
+    band = (freqs >= low) & (freqs < low + width)
+    spectrum = spectrum.clone()
+    spectrum[:, :, band] = 0
+    return torch.fft.irfft(spectrum, n=samples, dim=2)
+
+
+def aug_mixup(x: torch.Tensor, y: torch.Tensor, alpha: float = 0.2) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, float]:
+    """Linearly blend each sample with another random sample in the batch; the caller mixes the
+    loss the same way, using the two label sets and the returned weight."""
+    lam = float(np.random.beta(alpha, alpha)) if alpha > 0 else 1.0
+    permutation = torch.randperm(x.shape[0], device=x.device)
+    mixed = lam * x + (1 - lam) * x[permutation]
+    return mixed, y, y[permutation], lam
+
+
+TRANSFORMS = {
+    "amplitude": aug_amplitude, "noise": aug_noise, "channel_dropout": aug_channel_dropout,
+    "mirror": aug_mirror, "time_shift": aug_time_shift, "time_mask": aug_time_mask, "band_stop": aug_band_stop,
+}
+
+
+def augment(x: torch.Tensor, y: torch.Tensor, active: list[str]) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None, float]:
+    """Applies every transform in ``active``, in TRANSFORMS' fixed order, to a training batch
+    (both classes alike). Returns (x, y_a, y_b, lam): y_b is None and lam is 1.0 unless mixup is
+    active, so the caller can always compute lam * loss(out, y_a) + (1 - lam) * loss(out, y_b)."""
+    for name in AUG_FLAGS:
+        if name not in active or name == "mixup":
+            continue
+        x = TRANSFORMS[name](x)
+    if "mixup" in active:
+        x, y_a, y_b, lam = aug_mixup(x, y)
+        return x, y_a, y_b, lam
+    return x, y, None, 1.0
 
 
 # ----------------------------------------------------------------------------- detection (same rules as src/detection.py)
@@ -299,6 +419,7 @@ def train(args, X, y, train_rows, valid_rows, seed: int, device, fixed_epochs: i
     """Train one model; early stopping on validation average precision unless ``fixed_epochs``."""
     torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
+    active = active_augmentations(args)
     model = build(args.arch, X.shape[2]).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     epochs = fixed_epochs or args.epochs
@@ -315,11 +436,13 @@ def train(args, X, y, train_rows, valid_rows, seed: int, device, fixed_epochs: i
             rows = np.sort(order[first : first + args.batch])
             xb = torch.from_numpy(X[rows]).to(device, non_blocking=True)
             yb = torch.from_numpy(y[rows]).to(device, non_blocking=True)
-            if args.augment:
-                xb = augment(xb)
+            yb_b, lam = None, 1.0
+            if active:
+                xb, yb, yb_b, lam = augment(xb, yb, active)
             optimizer.zero_grad(set_to_none=True)
             with torch.autocast(device.type, enabled=device.type == "cuda"):
-                loss = loss_fn(model(xb), yb)
+                logits = model(xb)
+                loss = loss_fn(logits, yb) if yb_b is None else lam * loss_fn(logits, yb) + (1 - lam) * loss_fn(logits, yb_b)
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
@@ -348,7 +471,8 @@ def main(argv=None) -> None:
     out = Path(args.out)
     (out / "predictions").mkdir(parents=True, exist_ok=True)
     (out / "models").mkdir(parents=True, exist_ok=True)
-    name = f"cnn_{args.arch}_{'augmented' if args.augment else 'plain'}"
+    active = active_augmentations(args)
+    name = run_name(args.arch, active)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     torch.set_num_threads(max(1, os.cpu_count() or 1))
     window_samples = int(round(args.window_s * FS))
@@ -398,7 +522,10 @@ def main(argv=None) -> None:
     print(f"  window average precision {average_precision_score(predictions['true_class'], predictions['proba']):.3f}")
 
     config = {
-        "name": name, "arch": args.arch, "augment": args.augment, "channels": CHANNELS, "fs": FS, "window_s": args.window_s,
+        "name": name, "arch": args.arch,
+        "augment": bool(active),  # legacy flag, kept so old readers (and the 3 already-committed runs) still work
+        "augmentation": {flag: flag in active for flag in AUG_FLAGS},
+        "channels": CHANNELS, "fs": FS, "window_s": args.window_s,
         "window_samples": window_samples, "context": "centred on each 2 s window (1 s step)",
         "normalization": "per recording and channel: (x - median) / (1.4826 * MAD), clipped at ±20",
         "filter": "Butterworth band-pass 0.5-40 Hz, order 4, zero-phase, before normalization",

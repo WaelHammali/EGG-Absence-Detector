@@ -1,0 +1,142 @@
+\chapter{Deep Learning}
+\label{chap:deeplearning}
+
+Every model in \Cref{chap:classicalml} learns from 320 hand-crafted features. This chapter asks
+whether a model that instead learns directly from the raw, filtered signal can do better ---
+trained on a separate GPU machine, since the classical pipeline's CPU-only environment has no
+PyTorch installed, and scored back here under the same event-level rules as everything else.
+
+\section{Two architectures}
+
+Two compact convolutional architectures were trained, both standard, well-established choices
+for EEG decoding rather than custom designs:
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{ShallowConvNet}: a temporal convolution followed by a spatial convolution and
+    pooling --- a simple, well-tested baseline architecture for EEG classification.
+  \item \textbf{EEGNet}: a compact network built from depthwise and separable convolutions,
+    designed specifically to be parameter-efficient on small EEG datasets.
+\end{itemize}
+
+Both are deliberately small, with only a few thousand parameters each. With 93 seizures in
+total, a larger network would risk simply memorizing the training recordings rather than
+learning a general seizure pattern.
+
+\section{Input and training recipe}
+
+Each input is 4 seconds of all 19 filtered EEG channels (1{,}024 samples at 256~Hz), centered on
+one of the official 2-second windows, so every CNN prediction lines up with exactly the same
+window the classical models were scored on. Each recording is normalized per channel using a
+robust statistic, the median and the median absolute deviation, clipped at $\pm 20$, rather than
+a plain mean and standard deviation, to reduce the influence of large artifacts.
+
+Training uses the same 5 outer \texttt{GroupKFold} folds as the classical models. Within each
+outer fold, some training recordings are further held out for early stopping and for choosing
+that fold's detection threshold, so the test fold is never touched during training or threshold
+selection. The real, imbalanced class proportions are kept; a weighted cross-entropy loss
+up-weights the seizure class to counter the imbalance. Training uses AdamW with a cosine
+learning-rate schedule, early stopping on validation average precision, and several random seeds
+per fold, with the resulting probabilities averaged across seeds.
+
+Optional online augmentation is applied to \emph{both} classes during training, generated fresh
+on the fly per training batch rather than pre-built into a fixed extra dataset --- a
+deliberately different strategy from the classical pipeline's augmentation in
+\Cref{chap:augmentation}, which only ever touches the seizure class. Eight transforms are
+available, each independently selectable so it can be tested alone or combined: the original
+five (amplitude scaling, small added noise, channel dropout, left-right mirroring, small time
+shifts) plus three more added for this project's wider augmentation sweep: time masking
+(zeroing a short random span), frequency band-stop (suppressing a random 1--4~Hz band), and
+mixup (linearly blending two windows and their labels).
+
+\section{A real bug: the IndexError in \texttt{event\_counts()}}
+
+During development, the CNN training script crashed with
+\texttt{IndexError: index 7943 is out of bounds for axis 0 with size 4344}. The cause: the
+function responsible for counting detected events per recording, \texttt{event\_counts()}, used
+the \emph{labels} returned by a pandas \texttt{groupby(...).groups} dictionary as if they were
+array \emph{positions}. This happens to work only when a table's row index is untouched,
+running from 0 to its length minus one. It silently broke the moment the function was handed a
+validation subset sliced out of a larger table with \texttt{.iloc[]}, because that subset keeps
+its original row numbers rather than renumbering from zero --- and it crashed specifically when
+a randomly chosen validation recording's original row number happened to exceed the size of the
+smaller validation subset. Earlier runs had not hit this because, by luck, the recordings chosen
+for validation had not triggered it.
+
+The fix computes the recording labels, interval starts, and interval ends as plain arrays once,
+then selects rows with a boolean mask instead of looking anything up by index label --- correct
+regardless of how the table was sliced beforehand. This is the kind of bug that is easy to miss
+in testing and only shows up on certain random splits, which is why it is called out here rather
+than quietly fixed and forgotten.
+
+\section{Results}
+
+The first run tried the five original transforms only as one fixed combination. A later, wider
+sweep tested every transform in isolation --- the same ``test each one alone, then combine the
+winners'' approach used on the classical side (\Cref{chap:augmentation}) --- to see whether any
+single transform could do better than the original combo, and whether the three new transforms
+(time masking, band-stop, mixup) helped at all.
+
+\begin{table}[H]
+  \centering
+  \small
+  \caption{Every CNN run, ShallowConvNet unless noted, nested threshold (best of plain and
+    smoothed+hysteresis). FA = false alarms.}
+  \label{tab:cnn-results}
+  \begin{tabular}{lrrr}
+    \toprule
+    Model & Event F1 & Found/93 & FA \\
+    \midrule
+    SVM, channel dropout (classical, new best) & \textbf{0.901} & 88 & 18 \\
+    SVM, unbalanced (classical, original baseline) & 0.894 & 86 & 16 \\
+    \midrule
+    \textbf{Amplitude alone} & \textbf{0.817} & 77 & 19 \\
+    Original five, combined (``augmented'') & 0.815 & 77 & 21 \\
+    EEGNet, original five combined & 0.811 & 85 & 32 \\
+    Mixup & 0.802 & 78 & 24 \\
+    Mirror alone & 0.798 & 79 & 27 \\
+    Time masking alone & 0.790 & 77 & 25 \\
+    Time shift alone & 0.788 & 77 & 26 \\
+    Plain (no augmentation) & 0.781 & 76 & 26 \\
+    Noise alone & 0.778 & 76 & 27 \\
+    Noise + time masking (combined) & 0.774 & 78 & 32 \\
+    Band-stop alone & 0.774 & 76 & 28 \\
+    Channel dropout alone & 0.767 & 76 & 30 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+None of the 12 CNN runs beats the classical models; the best of them, amplitude scaling alone,
+falls 0.084 short of the new SVM best (0.901) and 0.077 short of the original SVM baseline
+(0.894). This matches the expectation stated from the start of this project: 93 seizures spread
+across 21 patients is too little data for a raw-signal convolutional network to out-learn
+hand-designed features. It is recorded here as a real, useful finding, not a failure.
+
+The isolated-transform sweep itself is a smaller, closer race: amplitude scaling alone
+(0.817) \emph{barely} edges out the original five-transform combination (0.815) --- a
+difference of 0.002, well within normal run-to-run noise, so this should be read as a tie, not a
+win for isolating transforms. Unlike the classical pipeline, where channel dropout was a clear,
+substantial winner once isolated, no single CNN transform stands out from the pack: most scores
+cluster between 0.77 and 0.82 regardless of which transform is used, and combining noise with
+time masking (0.774) did not beat either alone. Channel dropout, the classical pipeline's best
+method, is actually the \emph{weakest} transform for the CNN (0.767) --- the opposite of what
+happened with the feature-based models, a reminder that a transform's effect depends on how a
+model is trained, not just on the transform itself.
+
+Smoothing and hysteresis post-processing (described fully in \Cref{chap:evaluation}) was applied
+to every CNN run; it helped most of them (plain: $+0.007$; amplitude: $+0.006$; mirror:
+$+0.016$; and EEGNet's combo substantially, $+0.035$) but slightly hurt the original five-combo
+run ($-0.004$) and time shift ($-0.027$). \Cref{tab:cnn-results} reports each model at whichever
+of the two did better for it, which is also how the classical-vs-CNN comparison is framed
+throughout this report.
+
+\begin{summarybox}
+Two compact CNNs, ShallowConvNet and EEGNet, were trained directly on 4-second raw EEG windows
+on a separate GPU machine, under the same recording-level evaluation as the classical models. A
+real bug --- an index-label-vs-position mix-up in the event-counting code --- caused a crash on
+certain random splits and was fixed once understood. A full sweep of 8 augmentation transforms,
+isolated and combined, found no single transform clearly better than the original five-transform
+combo (amplitude alone edges it out by 0.002, within noise), and channel dropout --- the
+classical pipeline's best method --- is actually the CNN's weakest. None of the 12 CNN runs
+(best: 0.817) beats the classical SVM (0.894, or the new best, 0.901), the expected, documented
+outcome for a raw-signal model trained on only 93 seizures.
+\end{summarybox}

@@ -370,9 +370,15 @@ ALGORITHM_COLORS = {
 
 
 def model_style(model: str, theme: str) -> dict:
-    """Color by algorithm; solid for unbalanced training, dashed / hatched for balanced, dotted for augmented."""
-    algorithm, mode = model.split("_")
-    dash, pattern = {"unbalanced": ("solid", ""), "balanced": ("dash", "/"), "augmented": ("dot", ".")}[mode]
+    """Color by algorithm; solid for unbalanced training, dashed / hatched for balanced, dotted for every
+    augmented variant (augmented, augmented_noise, augmented_combined, ...)."""
+    algorithm, mode = model.split("_", 1)
+    if mode == "unbalanced":
+        dash, pattern = "solid", ""
+    elif mode == "balanced":
+        dash, pattern = "dash", "/"
+    else:
+        dash, pattern = "dot", "."
     return {"color": ALGORITHM_COLORS[theme][algorithm], "dash": dash, "pattern": pattern}
 
 

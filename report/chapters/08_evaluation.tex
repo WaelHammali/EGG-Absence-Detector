@@ -1,0 +1,72 @@
+\chapter{Evaluation}
+\label{chap:evaluation}
+
+The preceding chapters all use event-level F1 (\Cref{chap:classicalml}), but not always under
+exactly the same threshold-selection rule. This short chapter names the differences explicitly,
+so the comparisons in this report are read correctly rather than taken at face value.
+
+\section{Smoothing and hysteresis}
+
+A second, optional detection path exists, applied with no retraining: the per-window
+probabilities are first smoothed with a centered rolling median, then thresholded with
+\emph{hysteresis} --- a higher threshold is needed to start a detected event, and a lower
+threshold is enough to let an already-started event continue. This generally produces fewer,
+cleaner intervals than thresholding the raw probabilities directly. It is applied automatically,
+and reported alongside the plain result, for the CNN evaluations in \Cref{chap:deeplearning}; it
+is \emph{not} applied to the 12 classical models' headline numbers in
+\Cref{tab:classical-results}, which use the plain, unsmoothed path only. This is a real
+methodological difference between the two chapters' numbers, named here so it is not mistaken
+for an oversight.
+
+\section{Three ways of choosing a threshold}
+
+The ``best threshold'' reported for every classical model, including the augmentation sweep in
+\Cref{chap:augmentation}, is chosen and scored on the same out-of-fold predictions, which makes
+every classical headline number --- the original 0.894 and the new best, 0.901 --- slightly
+optimistic. The ensemble results in \Cref{chap:ensemble} and the CNN results in
+\Cref{chap:deeplearning} are more careful: each outer fold's threshold is chosen only from data
+outside that fold (other folds, for the ensembles; held-out training recordings, for the CNNs),
+never from the fold being scored.
+
+A fully nested re-scoring of the classical models, under this same stricter rule, is not
+finished --- only 3 models have been run this way so far (the full run is memory-heavy and was
+interrupted once for lack of RAM), and none of them is the new best model (SVM, channel
+dropout). Until it is, the comparison between the classical models' 0.894/0.901 and the best
+CNN's 0.817 should be read as informative but not perfectly matched: the classical numbers carry
+a small optimism the CNN numbers do not.
+
+\section{Where this leaves the comparison}
+
+\begin{table}[H]
+  \centering
+  \caption{The project's results, side by side, with the threshold protocol each one used.}
+  \label{tab:final-comparison}
+  \small
+  \begin{tabular}{p{7.3cm}rl}
+    \toprule
+    Result & Event F1 & Threshold protocol \\
+    \midrule
+    \textbf{SVM, channel-dropout augmentation (best overall)} & \textbf{0.901} & same-fold (optimistic) \\
+    SVM + ShallowConvNet ensemble (ties the best) & 0.901 & held-out-fold \\
+    SVM, unbalanced (original baseline) & 0.894 & same-fold (optimistic) \\
+    SVM + Random Forest ensemble (ties the original baseline) & 0.894 & held-out-fold \\
+    ShallowConvNet, amplitude alone (best CNN) & 0.817 & nested \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Taken together: a single classical model, SVM trained with channel-dropout augmentation, is both
+the simplest and the best-performing result in this project. Every attempt to do better by
+blending models ties it at best, never beats it. The CNN, trained end-to-end on raw signal, does
+not come close to the feature-engineered approach at this dataset size, no matter which of its 8
+augmentation transforms is used --- exactly the outcome the project set out to test for.
+
+\begin{summarybox}
+Three threshold-selection rules are in play across this report --- same-fold (slightly
+optimistic), held-out-fold, and nested --- and they are not interchangeable. The one piece of
+evaluation work still missing is a full nested re-scoring of the classical models (including the
+new best one), which would make the classical-vs-CNN comparison fully fair; until then, the
+classical numbers should be read as slightly favorable to the classical side relative to the
+CNNs' nested 0.817. Even allowing for that gap, the margin (0.901 vs.\ 0.817) is wide enough that
+the conclusion --- classical beats deep learning here --- is not in doubt.
+\end{summarybox}

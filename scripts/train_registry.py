@@ -30,7 +30,7 @@ sys.path.insert(0, str(ROOT))
 
 from src.detection import detect_all, event_metrics, sweep_thresholds
 from src.io import CHANNELS
-from src.paths import AUGMENTED as AUGMENTED_NAME, OFFICIAL, dataset_file
+from src.paths import AUGMENTED as AUGMENTED_NAME, AUGMENTED_METHODS, OFFICIAL, dataset_file
 from src.preprocessing import describe
 from train_models import METADATA, models as pipelines, undersample
 
@@ -41,7 +41,16 @@ PREDICTIONS = ROOT / "outputs/predictions"
 MODELS = ROOT / "models"
 ALGORITHMS = {"dt": "Decision Tree", "rf": "Random Forest", "knn": "KNN", "svm": "SVM"}
 AUGMENTED = dataset_file(AUGMENTED_NAME)
-MODES = ("unbalanced", "balanced", "augmented")
+# mode name -> extra dataset path. "augmented" keeps its original name/dataset for backward
+# compatibility; every other augmentation method gets an "augmented_<method>" mode.
+EXTRA_DATASETS = {"augmented": AUGMENTED} | {
+    f"augmented_{method}": dataset_file(name) for method, name in AUGMENTED_METHODS.items() if method != "shift_mirror"
+}
+MODES = ("unbalanced", "balanced") + tuple(EXTRA_DATASETS)
+MODE_LABELS = {"unbalanced": "Unbalanced", "balanced": "Balanced"} | {
+    mode: f"Augmented ({mode.removeprefix('augmented_').replace('_', ' ')})" if mode != "augmented" else "Augmented"
+    for mode in EXTRA_DATASETS
+}
 BALANCED_SEEDS = (0, 1, 2, 3, 4)
 SAVED_SEED = 0
 # Up to 0.99: models trained on balanced data need high thresholds on real proportions.
@@ -115,7 +124,10 @@ def best_threshold(table: pd.DataFrame, annotations: pd.DataFrame) -> float:
 
 def main() -> None:
     parser = ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--modes", nargs="+", choices=MODES, default=list(MODES), help="Training modes to train (default: all)")
+    parser.add_argument(
+        "--modes", nargs="+", choices=MODES, default=["unbalanced", "balanced", "augmented"],
+        help="Training modes to train (default: unbalanced, balanced, augmented; new augmentation-method modes are opt-in)",
+    )
     selected = parser.parse_args().modes
     frame = pd.read_parquet(DATASET)
     features = [column for column in frame.columns if column not in METADATA]
@@ -125,12 +137,16 @@ def main() -> None:
     annotations = pd.read_csv(ANNOTATIONS)
     hours = float(frame.groupby("recording")["end_s"].max().sum() / 3600)
     reference = frame[["recording", "window", "start_s", "end_s"]].assign(true_class=frame["class"].astype(np.uint8))
-    extra = None
-    if "augmented" in selected:
-        if not AUGMENTED.exists():
-            raise SystemExit(f"{AUGMENTED.relative_to(ROOT)} not found: run python scripts/build_augmented.py")
-        augmented = pd.read_parquet(AUGMENTED)
-        extra = (augmented[features].to_numpy(dtype=np.float64), augmented["recording"].to_numpy())
+    extras: dict[str, tuple] = {}
+    for mode in selected:
+        if mode not in EXTRA_DATASETS:
+            continue
+        path = EXTRA_DATASETS[mode]
+        if not path.exists():
+            method = mode.removeprefix("augmented_") if mode != "augmented" else "shift_mirror"
+            raise SystemExit(f"{path.relative_to(ROOT)} not found: run python scripts/build_augmented.py --method {method}")
+        table = pd.read_parquet(path)
+        extras[mode] = (table[features].to_numpy(dtype=np.float64), table["recording"].to_numpy())
     PREDICTIONS.mkdir(parents=True, exist_ok=True)
     MODELS.mkdir(parents=True, exist_ok=True)
 
@@ -143,6 +159,7 @@ def main() -> None:
         "balanced_training": "random undersampling of each training fold: all class-1 windows + as many class-0 windows",
         "augmented_training": "extra class-1 windows of the training recordings (0.25 s shifts and left-right mirror), from scripts/build_augmented.py",
         "augmented_dataset": str(AUGMENTED.relative_to(ROOT)),
+        "augmented_variants": {mode: str(path.relative_to(ROOT)) for mode, path in EXTRA_DATASETS.items() if mode != "augmented"},
         "balanced_seeds": list(BALANCED_SEEDS),
         "saved_seed": SAVED_SEED,
         "recorded_hours": hours,
@@ -160,7 +177,7 @@ def main() -> None:
             seeds = BALANCED_SEEDS if mode == "balanced" else (None,)
             runs = []
             for seed in seeds:
-                proba, fold_of, seconds, training = out_of_fold(algorithm, X, y, groups, seed, extra if mode == "augmented" else None)
+                proba, fold_of, seconds, training = out_of_fold(algorithm, X, y, groups, seed, extras.get(mode))
                 table = reference.assign(fold=fold_of, proba=proba.astype(np.float32))
                 threshold = best_threshold(table, annotations)
                 runs.append(
@@ -175,8 +192,9 @@ def main() -> None:
             # Final model on all recordings, with the same undersampling seed as the saved predictions.
             rows = undersample(y, SAVED_SEED) if mode == "balanced" else np.arange(len(y))
             X_final, y_final = X[rows], y[rows]
-            if mode == "augmented":
-                X_final, y_final = np.vstack([X_final, extra[0]]), np.r_[y_final, np.ones(len(extra[0]), dtype=y.dtype)]
+            if mode in extras:
+                extra_X, _ = extras[mode]
+                X_final, y_final = np.vstack([X_final, extra_X]), np.r_[y_final, np.ones(len(extra_X), dtype=y.dtype)]
             started = time.perf_counter()
             final = pipeline(algorithm).fit(X_final, y_final)
             final_seconds = time.perf_counter() - started
@@ -189,7 +207,7 @@ def main() -> None:
                 MODELS / f"{key}.joblib", compress=3,
             )
             entry = {
-                "algorithm": algorithm, "algorithm_name": name, "mode": mode, "label": f"{name} · {mode.capitalize()}",
+                "algorithm": algorithm, "algorithm_name": name, "mode": mode, "label": f"{name} · {MODE_LABELS.get(mode, mode.capitalize())}",
                 "predictions": f"outputs/predictions/{key}.parquet", "model_file": f"models/{key}.joblib",
                 "best_threshold": saved["best"]["threshold"],
                 "training": saved["training"],

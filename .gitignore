@@ -20,6 +20,18 @@ data/cnn/
 models/*_balanced.joblib
 models/*_unbalanced.joblib
 models/*_augmented.joblib
+models/*_augmented_*.joblib
+
+# LaTeX build junk; keep report/main.tex, chapters/, figures/, facts.md and the compiled PDF only
+report/*.aux
+report/*.log
+report/*.out
+report/*.toc
+report/*.lof
+report/*.lot
+
+# Packaging convenience (zip of report/), not a source file
+/eeg_report_latex.zip
 
 # Intermediate cache of scripts/evaluate_nested.py (inner thresholds per model)
 outputs/nested/

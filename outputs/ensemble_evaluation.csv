@@ -11,8 +11,14 @@ ensemble,SVM · Unbalanced + cnn_eegnet_augmented,held_out_fold,0.86765655261459
 ensemble,SVM · Unbalanced + cnn_eegnet_augmented,optimistic,0.9003119893032239,90,3,19,2.17557251908397,,,,0.52
 ensemble,SVM · Unbalanced + cnn_shallow_plain,held_out_fold,0.8600140219677495,80,13,15,1.717557251908397,0.8503937007874016,0.8307692307692308,"{""1"": 0.86, ""2"": 0.9, ""3"": 0.86, ""4"": 0.86, ""5"": 0.94}",
 ensemble,SVM · Unbalanced + cnn_shallow_plain,optimistic,0.8761703253107644,82,11,15,1.717557251908397,,,,0.86
-ensemble,SVM · Unbalanced + Random Forest · Unbalanced + cnn_eegnet_augmented,held_out_fold,0.8388746803069055,82,11,24,2.7480916030534357,0.8484848484848485,0.8615384615384616,"{""1"": 0.86, ""2"": 0.47, ""3"": 0.47, ""4"": 0.58, ""5"": 0.58}",
-ensemble,SVM · Unbalanced + Random Forest · Unbalanced + cnn_eegnet_augmented,optimistic,0.8842105263157893,90,3,24,2.7480916030534357,,,,0.47
-svm_unbalanced,SVM · Unbalanced,"baseline (registry, optimistic)",0.894160399737546,86,7,16,1.8320610153529913,,,,
+ensemble,SVM · Unbalanced + Random Forest · Unbalanced + cnn_eegnet_augmented,held_out_fold,0.8388746803069055,82,11,24,2.748091603053436,0.8484848484848485,0.8615384615384616,"{""1"": 0.86, ""2"": 0.47, ""3"": 0.47, ""4"": 0.58, ""5"": 0.58}",
+ensemble,SVM · Unbalanced + Random Forest · Unbalanced + cnn_eegnet_augmented,optimistic,0.8842105263157893,90,3,24,2.748091603053436,,,,0.47
 ensemble,SVM · Unbalanced + cnn_shallow_augmented,held_out_fold,0.901060070671378,90,3,19,2.17557251908397,0.9,0.9692307692307692,"{""1"": 0.51, ""2"": 0.51, ""3"": 0.51, ""4"": 0.51, ""5"": 0.5}",
 ensemble,SVM · Unbalanced + cnn_shallow_augmented,optimistic,0.9050576752440106,90,3,18,2.0610687022900764,,,,0.51
+ensemble,SVM · Augmented (channel dropout) + cnn_shallow_amp,held_out_fold,0.8956309470432919,89,4,19,2.17557251908397,0.8920863309352518,0.953846153846154,"{""1"": 0.54, ""2"": 0.55, ""3"": 0.55, ""4"": 0.59, ""5"": 0.55}",
+ensemble,SVM · Augmented (channel dropout) + cnn_shallow_amp,optimistic,0.901060070671378,90,3,19,2.17557251908397,,,,0.55
+ensemble,SVM · Augmented (channel dropout) + Random Forest · Augmented (channel dropout),held_out_fold,0.8172881884849431,81,12,29,3.320610687022901,0.8461538461538461,0.8461538461538461,"{""1"": 0.91, ""2"": 0.77, ""3"": 0.64, ""4"": 0.75, ""5"": 0.86}",
+ensemble,SVM · Augmented (channel dropout) + Random Forest · Augmented (channel dropout),optimistic,0.8817727453668893,89,4,25,2.8625954198473287,,,,0.74
+svm_augmented_channel_dropout,SVM · Augmented (channel dropout),"baseline (registry, optimistic)",0.9007164790174003,88,5,18,2.061068642272115,,,,
+ensemble,SVM · Augmented (channel dropout) + Random Forest · Unbalanced,held_out_fold,0.8230251071647273,84,9,31,3.5496183206106875,0.8656716417910447,0.8923076923076924,"{""1"": 0.83, ""2"": 0.74, ""3"": 0.53, ""4"": 0.66, ""5"": 0.84}",
+ensemble,SVM · Augmented (channel dropout) + Random Forest · Unbalanced,optimistic,0.8858428377105786,83,10,14,1.603053435114504,,,,0.84

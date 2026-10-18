@@ -2,6 +2,16 @@
   "name": "cnn_eegnet_augmented",
   "arch": "eegnet",
   "augment": true,
+  "augmentation": {
+    "amplitude": true,
+    "noise": true,
+    "channel_dropout": true,
+    "mirror": true,
+    "time_shift": true,
+    "time_mask": false,
+    "band_stop": false,
+    "mixup": false
+  },
   "channels": [
     "Fp1",
     "Fp2",
@@ -76,7 +86,7 @@
     "recall": 0.8709677419354839,
     "threshold": 0.99
   },
-  "seconds": 1642.1251394748688,
+  "seconds": 1549.4043326377869,
   "final": {
     "epochs": 16,
     "threshold": 0.98
