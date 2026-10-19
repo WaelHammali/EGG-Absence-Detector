@@ -87,9 +87,27 @@ def reference_signals(recording: str) -> pd.DataFrame:
     return pd.DataFrame(columns)
 
 
+def cnn_curve_entries() -> dict:
+    """{name: {"predictions": path, "best_threshold": ...}} for every trained CNN, read from
+    outputs/cnn_evaluation.csv (the "optimistic" row -- a single scalar threshold, same
+    convention as the classical models' own best_threshold). Only what model_curves() below
+    actually needs; never written to models/registry.json."""
+    path = ROOT / "outputs/cnn_evaluation.csv"
+    if not path.exists():
+        return {}
+    table = pd.read_csv(path)
+    table = table.loc[table["name"].str.startswith("cnn_") & (table["kind"] == "optimistic")]
+    entries = {}
+    for _, row in table.iterrows():
+        if (ROOT / f"outputs/predictions/{row['name']}.parquet").exists():
+            entries[row["name"]] = {"predictions": f"outputs/predictions/{row['name']}.parquet", "best_threshold": float(row["threshold"])}
+    return entries
+
+
 def model_curves(annotations: pd.DataFrame) -> None:
     """Threshold sweeps, precision-recall curves and per-recording results of every model."""
     registry = json.loads(REGISTRY.read_text())
+    registry["models"] = {**registry["models"], **cnn_curve_entries()}
     thresholds = np.round(np.arange(0.05, 0.995, 0.01), 2)
     sweeps, curves, per_recording = [], [], []
     for key, entry in registry["models"].items():

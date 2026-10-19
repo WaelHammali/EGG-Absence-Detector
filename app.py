@@ -178,16 +178,16 @@ def header():
                         [
                             dmc.Text("Model", className="section-label"),
                             tip(
-                                "Algorithm of the model used in Prediction.",
+                                "Architecture of the model used in Prediction: the 4 classical algorithms or one of the 2 CNNs.",
                                 dmc.SegmentedControl(
-                                    id="algo", value=DATA.default_model.split("_")[0], withItemsBorders=False, **segment,
-                                    data=[{"value": key, "label": label} for key, label in app_data.ALGORITHM_SHORT.items()],
+                                    id="algo", value=app_data.split_model_key(DATA.default_model)[0], withItemsBorders=False, **segment,
+                                    data=[{"value": key, "label": label} for key, label in app_data.ALL_ALGORITHM_SHORT.items()],
                                 ),
                             ),
                             tip(
-                                "Training mode: Unbalanced trains on the real class proportions (about 96 % / 4 %); Balanced trains on as many normal windows as seizure windows (50 / 50); Augmented adds shifted and left-right mirrored copies of the training seizure windows (about 76 % / 24 %).",
+                                "Training mode (classical) or augmentation used (CNN); the list changes with the architecture above.",
                                 dmc.SegmentedControl(
-                                    id="train-mode", value=DATA.default_model.split("_", 1)[1], withItemsBorders=False, **segment,
+                                    id="train-mode", value=app_data.split_model_key(DATA.default_model)[1], withItemsBorders=False, **segment,
                                     data=[{"value": key, "label": label} for key, label in app_data.MODES.items()],
                                 ),
                             ),
@@ -360,9 +360,15 @@ def sidebar():
 
 
 def comparison_page():
+    # Grouped from the real, trained models (DATA.models), not a fixed algorithm x mode
+    # cartesian list, so this naturally includes the CNN runs alongside the classical ones.
+    groups: dict[str, list[str]] = {}
+    for model in DATA.models:
+        algorithm, _ = app_data.split_model_key(model)
+        groups.setdefault(algorithm, []).append(model)
     model_options = [
-        {"group": name, "items": [{"value": f"{key}_{mode}", "label": DATA.label(f"{key}_{mode}", short=True)} for mode in app_data.MODES]}
-        for key, name in app_data.ALGORITHMS.items()
+        {"group": app_data.ALL_ALGORITHMS[algorithm], "items": [{"value": model, "label": DATA.label(model, short=True)} for model in models]}
+        for algorithm, models in groups.items()
     ]
     graph = lambda identifier: dcc.Loading(
         dcc.Graph(id=identifier, config={"displaylogo": False, "displayModeBar": False}),
@@ -670,6 +676,17 @@ clientside_callback(
 )
 
 
+@app.callback(Output("train-mode", "data"), Output("train-mode", "value"), Input("algo", "value"))
+def train_mode_options(algorithm):
+    """Classical and CNN architectures have entirely different mode sets (unbalanced/balanced/...
+    vs. plain/amplitude/noise/...), so the list is rebuilt for whichever architecture is chosen;
+    defaults to that architecture's best-scoring model."""
+    candidates = [model for model in DATA.models if app_data.split_model_key(model)[0] == algorithm]
+    data = [{"value": app_data.split_model_key(model)[1], "label": app_data.mode_label(algorithm, app_data.split_model_key(model)[1])} for model in candidates]
+    best = max(candidates, key=lambda model: DATA.entry(model)["at_best_threshold"]["event"]["f1"])
+    return data, app_data.split_model_key(best)[1]
+
+
 @app.callback(Output("model", "data"), Output("active-model", "children"), Input("algo", "value"), Input("train-mode", "value"))
 def choose_model(algorithm, mode):
     model = f"{algorithm}_{mode}"
@@ -826,8 +843,8 @@ def comparison_summary(models, sort, theme):
     cards = []
     for position, model in enumerate(by_score):
         value = values[model]
-        algorithm, mode = model.split("_", 1)
-        title = html.Span([model_swatch(model, theme), html.Span(app_data.ALGORITHMS[algorithm]), html.Span(f" · {app_data.MODES[mode]}", style={"color": "var(--app-text-3)", "fontWeight": 500})], className="card-title")
+        algorithm, mode = app_data.split_model_key(model)
+        title = html.Span([model_swatch(model, theme), html.Span(app_data.ALL_ALGORITHMS[algorithm]), html.Span(f" · {app_data.mode_label(algorithm, mode)}", style={"color": "var(--app-text-3)", "fontWeight": 500})], className="card-title")
         facts = html.Div(
             [
                 html.Span("Seizures found"), html.B(f"{value['found']} of {value['found'] + value['missed']}"),

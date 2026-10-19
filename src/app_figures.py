@@ -7,7 +7,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly_resampler import FigureResampler
 
-from src.app_data import BANDS
+from src.app_data import BANDS, split_model_key
 from src.io import CHANNELS
 
 
@@ -362,17 +362,21 @@ def resampled_dict(figure: FigureResampler, view: tuple[float, float]) -> dict:
 
 # ----------------------------------------------------------------------------- comparison
 
-# One hue per algorithm; green (real seizures) and violet (threshold) stay reserved.
+# One hue per algorithm; green (real seizures) and violet (threshold) stay reserved. The two
+# CNN architectures get their own hues too, distinct from the four classical ones.
 ALGORITHM_COLORS = {
-    "dark": {"dt": "#C98500", "rf": "#3987E5", "knn": "#D55181", "svm": "#D95926"},
-    "light": {"dt": "#B7791F", "rf": "#2A78D6", "knn": "#D55181", "svm": "#D95926"},
+    "dark": {"dt": "#C98500", "rf": "#3987E5", "knn": "#D55181", "svm": "#D95926", "cnn_shallow": "#5B8C5A", "cnn_eegnet": "#8E6FD1"},
+    "light": {"dt": "#B7791F", "rf": "#2A78D6", "knn": "#D55181", "svm": "#D95926", "cnn_shallow": "#3F7A3D", "cnn_eegnet": "#7556B8"},
 }
 
 
 def model_style(model: str, theme: str) -> dict:
     """Color by algorithm; solid for unbalanced training, dashed / hatched for balanced, dotted for every
-    augmented variant (augmented, augmented_noise, augmented_combined, ...)."""
-    algorithm, mode = model.split("_", 1)
+    augmented variant (augmented, augmented_noise, augmented_combined, ...). CNN models (no
+    unbalanced/balanced concept) are always solid, distinguished by colour alone."""
+    algorithm, mode = split_model_key(model)
+    if algorithm.startswith("cnn_"):
+        return {"color": ALGORITHM_COLORS[theme][algorithm], "dash": "solid", "pattern": ""}
     if mode == "unbalanced":
         dash, pattern = "solid", ""
     elif mode == "balanced":

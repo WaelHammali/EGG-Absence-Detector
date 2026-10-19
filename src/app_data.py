@@ -34,6 +34,39 @@ MODES = {
     "augmented_time_mask": "Augmented (time mask)", "augmented_channel_dropout": "Augmented (channel dropout)",
     "augmented_combined": "Augmented (combined)",
 }
+# The two classical dicts above drive the "Same training mode" / "Same algorithm" presets,
+# which build keys as algorithm x mode (every combination must be a real model) -- CNN models
+# don't fit that shape (no "unbalanced"/"balanced", and each architecture only has the runs it
+# was actually given), so they get their own dicts, used only for display (label, colour),
+# never for building a cartesian list of keys.
+CNN_ALGORITHMS = {"cnn_shallow": "ShallowConvNet", "cnn_eegnet": "EEGNet"}
+CNN_ALGORITHM_SHORT = {"cnn_shallow": "ShallowConvNet", "cnn_eegnet": "EEGNet"}
+CNN_MODES = {
+    "plain": "Plain", "augmented": "Augmented (5 transforms)", "amp": "Amplitude", "noise": "Noise",
+    "chdrop": "Channel dropout", "mirror": "Mirror", "tshift": "Time shift", "tmask": "Time mask",
+    "bstop": "Band-stop", "mixup": "Mixup", "noise+tmask": "Noise + time mask",
+}
+ALL_ALGORITHMS = {**ALGORITHMS, **CNN_ALGORITHMS}
+ALL_ALGORITHM_SHORT = {**ALGORITHM_SHORT, **CNN_ALGORITHM_SHORT}
+# Deliberately NOT a flat {**MODES, **CNN_MODES} merge: both dicts happen to use the literal key
+# "augmented" for two different things (classical: shift+mirror; CNN: the five-transform combo),
+# so a flat merge would silently overwrite one meaning with the other. mode_label() below picks
+# the right dict by architecture instead.
+
+
+def split_model_key(model: str) -> tuple[str, str]:
+    """(algorithm, mode) for any model key, classical (``svm_unbalanced``) or CNN
+    (``cnn_shallow_amp``, architecture ``cnn_<arch>`` + whatever follows)."""
+    if model.startswith("cnn_"):
+        _, arch, mode = model.split("_", 2)
+        return f"cnn_{arch}", mode
+    return model.split("_", 1)
+
+
+def mode_label(algorithm: str, mode: str) -> str:
+    """Mode label for ``algorithm``'s own mode set (classical MODES or CNN_MODES -- never a
+    merged dict, since the two use some of the same keys for different things)."""
+    return (CNN_MODES if algorithm.startswith("cnn_") else MODES)[mode]
 
 
 class MissingData(Exception):
@@ -68,8 +101,8 @@ class AppData:
         return self.registry["models"][model]
 
     def label(self, model: str, short: bool = False) -> str:
-        algorithm, mode = model.split("_", 1)
-        return f"{(ALGORITHM_SHORT if short else ALGORITHMS)[algorithm]} · {MODES[mode]}"
+        algorithm, mode = split_model_key(model)
+        return f"{(ALL_ALGORITHM_SHORT if short else ALL_ALGORITHMS)[algorithm]} · {mode_label(algorithm, mode)}"
 
     def best_threshold(self, model: str) -> float:
         """Threshold maximizing event-level F1 for this model on out-of-fold predictions."""
@@ -114,6 +147,57 @@ class AppData:
         return detected, matches, metrics
 
 
+def cnn_registry_entries(annotations: pd.DataFrame, hours: float) -> dict[str, dict]:
+    """Registry-shaped entries for the trained CNNs, built from outputs/cnn_evaluation.csv and
+    their out-of-fold predictions -- never written to disk, so models/registry.json (read by
+    scripts/detect.py and scripts/train_registry.py) is never touched. Optional: if the CNN
+    results aren't there (no GPU run done yet), the app just shows the classical models."""
+    evaluation_path = ROOT / "outputs/cnn_evaluation.csv"
+    if not evaluation_path.exists():
+        return {}
+    table = pd.read_csv(evaluation_path)
+    table = table.loc[table["name"].str.startswith("cnn_") & (table["kind"] == "optimistic")]
+    entries: dict[str, dict] = {}
+    for _, row in table.iterrows():
+        name = row["name"]
+        predictions_path = ROOT / f"outputs/predictions/{name}.parquet"
+        config_path = ROOT / f"models/cnn/{name}_config.json"
+        if not predictions_path.exists():
+            continue
+        predictions = pd.read_parquet(predictions_path)
+        threshold = float(row["threshold"])
+        detected, matches = detect_all(predictions, annotations, threshold)
+        event = event_metrics(matches, len(detected))
+        event["detections"] = len(detected)
+        event["false_alarms_per_hour"] = event["fp"] / hours
+        proba, truth = predictions["proba"].to_numpy(), predictions["true_class"].to_numpy() == 1
+        predicted = proba >= threshold
+        tp, fp = int((predicted & truth).sum()), int((predicted & ~truth).sum())
+        fn, tn = int((~predicted & truth).sum()), int((~predicted & ~truth).sum())
+        precision, recall = (tp / (tp + fp) if tp + fp else 0.0), (tp / (tp + fn) if tp + fn else 0.0)
+        window = {
+            "tp": tp, "fp": fp, "fn": fn, "tn": tn, "precision": precision, "recall": recall,
+            "f1": 2 * precision * recall / (precision + recall) if precision + recall else 0.0,
+            "accuracy": (tp + tn) / len(predictions),
+        }
+        _, arch, mode = name.split("_", 2)
+        fit_seconds = None
+        if config_path.exists():
+            config = json.loads(config_path.read_text())
+            runs = len(config.get("fold_thresholds", {})) * config.get("seeds", 1)
+            fit_seconds = config["seconds"] / runs if runs else None
+        entries[name] = {
+            "algorithm": f"cnn_{arch}", "algorithm_name": CNN_ALGORITHMS[f"cnn_{arch}"],
+            "mode": mode, "label": row["label"],
+            "predictions": f"outputs/predictions/{name}.parquet",
+            "best_threshold": threshold,
+            "training": None, "fit_seconds_per_fold": fit_seconds, "final_fit_seconds": None,
+            "at_best_threshold": {"threshold": threshold, "window": window, "event": event},
+            "at_0.50": {"threshold": threshold, "window": window, "event": event},
+        }
+    return entries
+
+
 def load() -> AppData:
     missing = [(path, command) for path, command in REQUIRED.items() if not (ROOT / path).exists()]
     if missing:
@@ -126,6 +210,12 @@ def load() -> AppData:
     absent = [entry["predictions"] for entry in registry["models"].values() if not (ROOT / entry["predictions"]).exists()]
     if absent:
         raise MissingData("Prediction files are missing: " + ", ".join(absent) + ". Run: python scripts/train_registry.py")
+    annotations = pd.read_csv(ROOT / "data/interim/official/annotations_clean.csv")
+    metadata = pd.read_csv(APP_DATA / "recording_metadata.csv").fillna({"absence_type": "", "reference_channels": ""})
+    registry["models"] = {
+        **registry["models"],
+        **cnn_registry_entries(annotations, metadata["duration_s"].sum() / 3600),
+    }
     predictions = {key: pd.read_parquet(ROOT / entry["predictions"]) for key, entry in registry["models"].items()}
     return AppData(
         registry=registry,
@@ -133,8 +223,8 @@ def load() -> AppData:
         sweeps=pd.read_parquet(APP_DATA / "model_sweeps.parquet"),
         pr_curves=pd.read_parquet(APP_DATA / "model_pr_curves.parquet"),
         per_recording=pd.read_csv(APP_DATA / "model_per_recording.csv"),
-        annotations=pd.read_csv(ROOT / "data/interim/official/annotations_clean.csv"),
-        metadata=pd.read_csv(APP_DATA / "recording_metadata.csv").fillna({"absence_type": "", "reference_channels": ""}),
+        annotations=annotations,
+        metadata=metadata,
         events=pd.read_csv(APP_DATA / "technician_events.csv"),
     )
 
