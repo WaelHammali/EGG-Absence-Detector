@@ -213,13 +213,15 @@ The app opens in the light theme; the moon/sun button switches to the dark theme
 
 - **Home**: what the app is for, a real seizure with the best model's detection, the seven steps from raw EEG to detected seizures, the best model of each training mode, and buttons to the three parts. All numbers are read from the data and the registry.
 - **Visualisation**: the data only. Choose a patient in the sidebar (sex, age, duration, number of seizures). The 19 channels are toggle chips grouped by scalp region ("Show all" brings them back), stacked in 10-20 order or overlaid. Each curve turns green during a real seizure, a diamond marks each seizure start, and the bottom row is "yes" during a seizure.
-- **Prediction**: the model chosen in the header (algorithm: DT / RF / KNN / SVM; training mode: any of the 8 modes). A summary line gives the verdict for this patient (found, missed, false alarms) and the model's scores on all patients. The plot adds the model's probability, its detections and the threshold. The threshold slider starts at the model's best threshold and everything updates live.
+- **Prediction**: the model chosen in the header (architecture: DT / RF / KNN / SVM or either CNN, ShallowConvNet / EEGNet; the mode list next to it rebuilds to match whichever architecture is picked — 8 modes for a classical algorithm, up to 11 augmentation transforms for a CNN — and auto-selects that architecture's best-scoring run). A summary line gives the verdict for this patient (found, missed, false alarms) and the model's scores on all patients. The plot adds the model's probability, its detections and the threshold. The threshold slider starts at the model's best threshold and everything updates live.
 - **Comparison**, read from top to bottom:
   - *Who wins*: the best of the compared models, then the others in rank order.
   - *Why*: event F1 against the threshold, precision-recall curves, training class distribution.
   - *Detail*: sortable ranking, confusion matrices, a timeline of the selected patient and event F1 per patient.
 
-  Presets: "Same training mode", "Same algorithm, all modes", "All models", or a custom list. One colour per algorithm; solid = unbalanced, dashed or hatched = balanced, dotted = any augmented mode.
+  Presets: "Same training mode", "Same algorithm, all modes", "All models", or a custom list. The last two also include the 12 CNN runs, grouped by architecture. One colour per algorithm/architecture; among the classical models, solid = unbalanced, dashed or hatched = balanced, dotted = any augmented mode.
+
+All 44 trained models — 32 classical, 12 CNN — are selectable throughout the app, not just in the report; `prepare_app_data.py` reads `outputs/cnn_evaluation.csv` to fold the CNN runs in (skipped gracefully if that file doesn't exist yet, e.g. before a Kaggle run has been brought back).
 
 Plot toolbar: previous/next page (also the ← → keys), previous/next seizure, **Spectrum** (frequency content of a 2 s window, also opened by clicking a curve), **Intervals** (real seizures and detections), "Save view as PNG" and "Download intervals CSV".
 
