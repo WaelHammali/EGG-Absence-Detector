@@ -22,7 +22,11 @@ The application has four pages: \textbf{Home}, \textbf{Visualisation}, \textbf{P
     rather than listed alphabetically.
   \item \textbf{Prediction} overlays a chosen model's detected intervals on a recording's signal
     and its real annotated seizures, so a false alarm or a missed seizure can be inspected
-    directly against the EEG around it.
+    directly against the EEG around it. The model picker covers all six trained architectures
+    --- Decision Tree, Random Forest, KNN, SVM, ShallowConvNet, EEGNet --- and rebuilds its list
+    of training modes to match whichever architecture is selected, since a CNN's augmentation
+    options (\Cref{chap:deeplearning}) are not the same set as a classical model's
+    (\Cref{chap:augmentation}).
   \item \textbf{Comparison} ranks the models against each other. Its ranking table supports 12
     different sort metrics --- event F1, recall, precision, seizures found, missed seizures,
     false alarms, false alarms per hour, window-level F1/recall/precision, onset/offset error,
@@ -92,24 +96,31 @@ both themes.
 
 \section{The Comparison page in depth}
 
-The Comparison page's ``all models'' view puts every one of the 12 classical models side by
-side for one chosen patient.
+The Comparison page's ``all models'' view puts every one of the 44 trained models --- 32
+classical (four algorithms times eight training modes) and 12 CNNs (eleven ShallowConvNet
+training-mode variants, isolating and combining the transforms from \Cref{chap:deeplearning},
+plus one EEGNet run) --- side by side for one chosen patient. The
+same page's ``Same training mode'' view also picked up the five new augmentation methods from
+\Cref{chap:augmentation} as extra tabs, next to the original Unbalanced, Balanced and Augmented
+ones.
 
 \begin{figure}[H]
   \centering
   \includegraphics[width=0.92\linewidth]{comparison_depth_a.png}
-  \caption{All 12 models selected for patient \texttt{211104B\_D}, each shown as a card with its
-    event F1, seizures found, false alarms, recall, precision, and threshold --- SVM unbalanced
-    is marked ``Best event F1.'' These numbers (0.89 event F1, 86 of 93 found, 16 false alarms,
-    threshold 0.82) match \Cref{tab:classical-results} exactly, since the app reads the same
-    underlying results rather than recomputing anything.}
+  \caption{All 44 models selected for patient \texttt{190304A\_E}, each shown as a card with its
+    event F1, seizures found, false alarms, recall, precision, and threshold --- SVM with
+    channel-dropout augmentation is marked ``Best event F1.'' These numbers (0.90 event F1, 88 of
+    93 found, 18 false alarms, threshold 0.90) match \Cref{tab:augmentation-full} exactly, since
+    the app reads the same underlying results rather than recomputing anything; the 12 CNN runs
+    are folded in from \texttt{outputs/cnn\_evaluation.csv} the same way, without ever touching
+    \texttt{models/registry.json}.}
   \label{fig:app-comparison-a}
 \end{figure}
 
 \begin{summarybox}
 A four-page Dash application --- Home, Visualisation, Prediction, Comparison --- reads only
 precomputed results and lets a visitor explore the real EEG signal, a chosen model's detections
-down to a single missed seizure on a single patient, and a full 12-model comparison, in a
-redesigned, calm clinical visual style. Every number shown in the app traces back to the exact
-same results tables used throughout this report.
+down to a single missed seizure on a single patient, and a full 44-model comparison across six
+architectures, in a redesigned, calm clinical visual style. Every number shown in the app traces
+back to the exact same results tables used throughout this report.
 \end{summarybox}
